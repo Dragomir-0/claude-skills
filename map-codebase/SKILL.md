@@ -34,6 +34,14 @@ stay cheap; `--full` lifts the caps when you genuinely need everything.
 Artifact paths, repo resolution, `<Name>` derivation, workspace rules, the read-only guardrail and
 cost discipline live in `~/.claude/skills/_shared/pipeline-contract.md`. Read it; do not restate it.
 
+## 0 — Model floor
+
+Check the required tier for the invoked mode (full build, `--update`, or `--verify`) against
+`~/.claude/skills/_shared/complexity-scoring.md`'s Map-level table, then against the model actually
+powering this session. If it falls short, tell the user and ask them to switch (`/model`) before
+proceeding, and wait — don't run a build or update under a lower tier "just this once." If they
+explicitly choose to proceed anyway, note it in `index.md`'s header.
+
 ## Preflight
 
 1. **Run `map.mjs scan`** and use the `root` it reports. If it exits 3 with
@@ -220,10 +228,17 @@ that writes seven files publishes seven artifacts.
 
 By the time a map reaches this section its content is finished and has passed `verify` — nothing
 left in the publish step is a judgment call, it is a mechanical read-URL/call-tool loop. Dispatch
-it to a subagent pinned to `claude-haiku-4-5-20251001` via the `Workflow` tool rather than doing
-it in-session: one dispatch per file, or one dispatch handling the whole batch when several maps
-changed in a run. Always specify the model explicitly — an omitted model inherits the session's
-own. Hand the subagent's brief the file's path, its `description` and (first publish only)
+it to a subagent pinned to `claude-haiku-4-5-20251001` (ID per `complexity-scoring.md` § Model
+reference) rather than doing it in-session: one dispatch per file, or one dispatch handling the
+whole batch when several maps changed in a run. Always specify the model explicitly — an omitted
+model inherits the session's own. Specify nothing but the model: no `effort` or other request
+fields, which are unverified on the dispatch surface.
+
+**If the dispatch tool isn't available** — it needs the user's multi-agent opt-in, and that may be
+off or the tool may be absent entirely — **publish in-session and say so plainly.** The Red flag
+below is about not *wastefully* spending the session's own model on mechanical work when a cheaper
+subagent is available; it is not a reason to skip publishing or to stall the run. An unavailable
+tool is a stated degradation, never a silent one. Hand the subagent's brief the file's path, its `description` and (first publish only)
 `favicon`, and — for a republish — the existing URL from `## Published artifacts`; have it perform
 the `action: "read"` on that URL itself before publishing, in the same dispatch, since the refusal
 to overwrite an unread artifact is checked against whoever is about to call publish. It reports
@@ -298,7 +313,9 @@ One cheap `Glob` batch decides this. **Never re-walk the tree "to make sure."**
 - Regenerating every map on `--update` when the script named one.
 - Finishing a build without publishing the maps, or publishing on `--verify`.
 - Publishing in-session instead of dispatching the Haiku-pinned subagent from `## Publishing ›
-  Model` — the publish step is mechanical and doesn't need the session's own model.
+  Model` **while that dispatch was actually available** — the publish step is mechanical and doesn't
+  need the session's own model. (If the dispatch tool is unavailable, publishing in-session and
+  saying so is the correct behaviour, not a red flag.)
 - Publishing without `url` on a rebuild — that creates a duplicate artifact and strands the link
   people already have.
 - Converting a map to HTML to publish it, forking it from the file on disk.

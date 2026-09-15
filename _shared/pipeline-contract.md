@@ -162,10 +162,36 @@ Never invent a second name for the same feature midway through the pipeline.
 
 ---
 
+## Telegraph before acting
+
+**Say what you are about to do, before you do it, in one short line.** Every stage of this pipeline
+runs long and spends real tokens; the user is reading a terminal and cannot see tool calls. A step
+that starts without warning is a step they cannot redirect until it has already cost them.
+
+- **One line, ahead of each significant step** — a dispatch, a milestone, a publish, a scan, a
+  commit, a hard pause. Not every tool call.
+- **As few tokens as possible.** "Scoring the ticket, then checking the model floor." is enough.
+  Telegraphing is a courtesy to the reader, not a second place to think.
+- **Say what, not why.** The reasoning already happened; do not narrate deliberation, list options
+  you rejected, or restate the plan. No preamble ("Let me now…"), no trailing summary of what the
+  line just said.
+- **Before anything expensive or irreversible, telegraph *and stop*** — that is the escalation
+  checkpoint below, not a heads-up. Telegraphing never converts a hard pause into a notification.
+
+The test: could the user, reading only your telegraph lines, follow what the run did and interrupt
+at the right moment? If a line does not help them do that, it is costing tokens for nothing.
+
 ## Cost discipline
 
 Applies to every stage. Inherited from the retired `batman` skill, which proved it out.
 
+- **Keep repeated context byte-identical, and put it first.** The cheapest token is one that hits a
+  prompt cache, and caching is prefix-matched — a single changed byte anywhere in the prefix
+  re-prices everything after it. Where the same material is sent more than once (a plan's global
+  constraints across many dispatches, a map excerpt reused per task, a standing instruction block),
+  reproduce it verbatim and up front, with only the per-call specifics at the end. Re-wording the
+  same constraint each time is a silent full-price re-read. This is the **first** cost lever, ahead
+  of every model-tier choice below it; tier selection is the last one, not the first.
 - **Consult the map's search hints before touching the filesystem.** The hints ledger in
   `.claude/maps/index.md` exists so a later run does not repeat an earlier run's discovery cost.
 - **Search narrow.** `Glob` for structure; `Grep` with `glob`/`type` filters and `head_limit` for
@@ -185,6 +211,24 @@ bar for trivial chatter, not for a deliberate multi-x token jump — that decisi
 | "This fan-out is the routine cost of the ticket" | Routine or not, it is a deliberate multi-x jump over what you have spent. Ask. |
 | "The user said work autonomously" | That lowers the bar for chatter, not for a large spend. |
 | "It's read-only, so spending is fine" | Read-only tokens cost the same as any other tokens. |
+| "The cheaper model makes this dispatch cheap" | Judge cost per *completed* task. A cheap attempt that fails, retries a tier up, and drags a verification behind it cost more than starting at the right tier. |
+
+## Dispatch surface
+
+Skills that dispatch subagents (`execute-plan`, and the Haiku-pinned publish/draft steps in
+`map-codebase` and `kevin`) assume a harness dispatch tool that accepts a **model** per dispatch.
+Anything beyond that — budget accounting, `effort`, `thinking`, or any other Claude API request
+field — is **not verified to exist** on that surface and must never be written into a skill as an
+instruction to pass.
+
+This matters because the failure is silent: a fabricated parameter is dropped without error, the run
+looks normal, and the instruction reads as authoritative to every later session. Two rules follow.
+
+- **Control cost through what is verifiable** — which tier is dispatched, how tightly the brief is
+  scoped, how much context it carries, and how many dispatches happen at all.
+- **If a tool the skill expects isn't there, say so and stop** — name the missing capability to the
+  user rather than approximating it. A budget the harness does not enforce is an estimate, and must
+  be reported as one.
 
 ---
 

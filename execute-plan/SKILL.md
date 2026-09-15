@@ -8,7 +8,7 @@ description: >
   looping build / test-feature / kevin / corrections per item until both come back clean.
   Triggered by /execute-plan.
 disable-model-invocation: false
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Workflow, Skill, AskUserQuestion, TaskCreate, TaskUpdate
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Workflow, Skill, AskUserQuestion
 ---
 
 # execute-plan
@@ -36,19 +36,31 @@ source of truth. Artifact paths and cost discipline come from
 
 ## 1 — Budget guard
 
-**The ceiling is 350k output tokens per milestone.** Set it as `budget.total` in the Workflow
-script.
+**The ceiling is 350k output tokens per milestone.** Set it as the dispatch budget if the harness
+exposes one; otherwise track it yourself (see below) — don't assume the tool enforces it.
 
 Before dispatching anything, print the milestone's projected cost by summing the plan's per-task
 token bands (S ~5–15k, M ~15–40k, L ~40–100k, XL >100k). Show it to the user alongside the
 ceiling.
 
-While running, check `budget.remaining()` before each dispatch. When it falls below the next
+While running, check the remaining budget before each dispatch. When it falls below the next
 task's estimate, **hard-stop and ask** whether to continue. Never silently exceed the ceiling.
 
 The figure is revisable — the user can raise it for a given run — but it is never quietly
 ignored. This exists because a runaway execution loop can consume a week's allowance in a single
 milestone.
+
+**Output tokens are not the whole bill.** This ceiling counts generation, which is the priciest
+per token (5× input at every tier) but rarely the largest share of a milestone's spend — that is
+input: the plan, the maps, the diffs and the files, re-read on every dispatch. A milestone can sit
+well under 350k output and still be the most expensive thing the pipeline does all week. So treat
+the ceiling as one of two guards, and watch dispatch **count** as the second: each one re-establishes
+context from scratch. If a milestone's task count climbs past what the plan projected, say so at the
+same checkpoint, even when output tokens look fine.
+
+**If the dispatch surface exposes no budget accounting**, track the projection and the running total
+yourself and say plainly in the milestone report that the figure is an estimate rather than a
+measured ceiling. Never present an unmeasured number as if the tool enforced it.
 
 ## 2 — Model policy
 
@@ -57,6 +69,9 @@ milestone.
 | **Controller — you** | session model, typically Opus 5 | decompose, **owns every verification** (adjudicates the result even when the mechanical diff-check for a large diff is delegated per §5), regression re-eval, adjudication; primary implementer for any task scored 8-10 |
 | **Subagent — mechanical** | `claude-haiku-4-5-20251001` | tasks scored 1-3; optional mechanical helpers alongside a 4-7 task |
 | **Subagent — judgment** | `claude-sonnet-5` | primary implementer for tasks scored 4-7; every escalation |
+
+Model IDs, context windows and prices: `complexity-scoring.md` § Model reference — that table is
+authoritative, and the IDs above are a convenience copy of it.
 
 🔒 **Subagents never exceed Sonnet.** Always specify the model explicitly on every dispatch — an
 omitted model inherits the controller's Opus and violates the cap. "Mechanical" and "judgment"
@@ -73,14 +88,33 @@ constraints, and the model tier. If the plan carries a `## Design Direction` and
 a UI file, include it verbatim in the brief's global constraints — this is what keeps every UI
 task visually consistent without each subagent re-deriving style choices on its own.
 
+**Write every brief as a constant block then a variable block, in that order.** Most of what goes
+into a brief is identical across a milestone — the plan's global constraints, the `## Design
+Direction`, the architecture-map excerpt, the repo and branch. Only the goal, the files and the
+inherited interfaces change per task. Put the shared part first, **byte-identical every time**, and
+the task-specific part last. Prompt caching is prefix-matched: any byte that varies invalidates
+everything after it, so re-wording the same constraints per task turns a cacheable prefix into a
+full-price re-read on every dispatch. This is the cheapest lever in the whole skill and it costs
+nothing but ordering discipline. It matters most where dispatch counts are highest, and it is worth
+more than any tier choice below.
+
+Consequence for tiering: prefer **fewer, slightly larger** atomic tasks over many tiny ones when
+they share a file and a constraint set. "Smallest possible" is about single-step *verifiability*,
+not about maximizing dispatch count — every extra dispatch pays briefing overhead and, when it
+crosses tiers, lands in a different cache namespace.
+
 Score each task against its own brief using the task-level rubric in
 `~/.claude/skills/_shared/complexity-scoring.md`, then dispatch accordingly:
 
 | Score | Dispatch |
 |---|---|
-| 1-3 | `claude-haiku-4-5-20251001`. |
-| 4-7 | `claude-sonnet-5` as primary implementer; may optionally peel off strictly mechanical sub-pieces to `claude-haiku-4-5-20251001` subagents run alongside it. |
+| 1-3 | Haiku — **subject to the 200K context gate** in `complexity-scoring.md`; if the brief plus its files won't fit, dispatch Sonnet and note `ctx=overflow`. |
+| 4-7 | Sonnet as primary implementer; may optionally peel off strictly mechanical sub-pieces to Haiku subagents run alongside it. |
 | 8-10 | Controller (Opus) is the primary implementer — no capped subagent owns a task this hard. Still dispatch the normal Haiku/Sonnet subagent scaling from §1/§4 for any genuinely separable mechanical portions; leading the hard part directly doesn't mean doing all of it solo. |
+
+Exact model IDs: `complexity-scoring.md` § Model reference. Read that section's cost-cascade note
+before scoring a borderline task down to Haiku — a Haiku attempt that fails and retries at Sonnet
+costs more than starting at Sonnet.
 
 Record the score on the task's ledger line (`score=<n>`, see §7) so a resumed run can see why a
 task landed where it did without re-deriving the call.
@@ -91,9 +125,9 @@ Governs the **primary implementer** for a task. Two subagent attempts, then you 
 a task scored 8-10 in §3, where the controller is the primary implementer from the start, not a
 fallback reached after failed attempts.
 
-1. **Attempt 1** — the model §3's score assigned: `claude-haiku-4-5-20251001` for a 1-3, or
-   `claude-sonnet-5` for a 4-7. (An 8-10 task starts at step 3 — see above.)
-2. **Attempt 2** — `claude-sonnet-5`, with your findings from attempt 1. A task that started at
+1. **Attempt 1** — the model §3's score assigned: Haiku for a 1-3, or Sonnet for a 4-7. (An 8-10
+   task starts at step 3 — see above.)
+2. **Attempt 2** — Sonnet, with your findings from attempt 1. A task that started at
    Haiku escalates a tier; a task that started at Sonnet gets one retry with findings — there's no
    capped tier above it to escalate to, and a third identical-tier attempt would buy no new
    capability over the second, only more tokens spent hoping for a different outcome.
@@ -119,13 +153,33 @@ against:
 
 Check adherence to the architecture map, syntax correctness, logical errors, and alignment with
 the atomic task goal — and, for a UI diff, adherence to the plan's Design Direction (style,
-palette, typography, component patterns). Large diff → dispatch a dedicated `claude-sonnet-5`
-verifier subagent to keep your context clean. Small diff → verify inline.
+palette, typography, component patterns).
 
-**Delegating the mechanical diff-check doesn't delegate the decision.** Read the verifier's report
-and adjudicate pass/fail yourself before moving on — that adjudication is what §2 means by the
-controller "owning" verification. A verifier subagent may do the reading; only you decide what it
-means.
+**Large diff** → dispatch a dedicated Sonnet verifier subagent to keep your context clean,
+regardless of the task's own score.
+
+**Small diff** → scale the inline verifier to the task's own §3 score instead of always spending the
+controller's own tier on it:
+
+| Task score | Small diff verified by |
+|---|---|
+| 1-3 | Haiku or Sonnet subagent — still a different instance than the implementer |
+| 4-7 | Sonnet subagent |
+| 8-10 | The controller, inline — unchanged, this is already the tier implementing the task |
+
+Model IDs come from `complexity-scoring.md` § Model reference; the Haiku context gate there applies
+to verifier dispatches too — a diff too large for 200K goes to Sonnet whatever the task scored.
+
+**The lever here is scope, not a request parameter.** Keep a verifier's cost down by giving it a
+tight brief — the diff, the task's acceptance criteria, and the specific constraints that apply —
+rather than the whole plan. Do not instruct a dispatch to set `effort`, `thinking`, or any other
+Claude API request field: those are unverified on the harness's dispatch surface, and a fabricated
+parameter is silently dropped while reading as authoritative to the next session.
+
+**Delegating the mechanical diff-check doesn't delegate the decision.** Whichever instance
+verifies, read its report and adjudicate pass/fail yourself before moving on — that adjudication is
+what §2 means by the controller "owning" verification. A verifier subagent may do the reading; only
+you decide what it means.
 
 If errors are found, return a **strict list of corrections** to feed into the next attempt.
 
@@ -150,6 +204,22 @@ STAT | task=<N> | score=<1-10> | repo=<name> | role=subagent|verifier|verify-inl
 `score=` is the task's complexity-scoring result from §3 — it's what determined `model=` for that
 task's first dispatch, so keep both even when a later round escalates past it.
 
+**Read the ledger back at the end of every milestone.** The `score`/`model`/`round`/`tokens` columns
+exist to test the tiering policy, not just to survive compaction, and a policy nothing ever checks is
+an assumption wearing a table's clothes. Cost the milestone two ways from the lines you just wrote:
+what the cascade actually cost (every round, including failed first attempts and the verifications
+they triggered) against what one Sonnet attempt per task would have cost. Report both figures in the
+milestone summary in one line.
+
+Two signals justify changing the policy rather than the run, and both should be raised to the user
+when they appear across a few milestones:
+
+- **Haiku's 1-3 band is too wide** — if score-1-3 tasks routinely show `round=2`, the retries are
+  outspending what the first attempt saved. Narrow the band (score borderline tasks up) rather than
+  adding a third attempt.
+- **A tier is never used, or never fails** — a band nothing lands in is dead configuration; a band
+  that never fails is a band that could absorb work from the tier above it.
+
 `repo=` is always present — single-repo runs repeat one value. Without it a resumed run cannot
 tell which repository a task belonged to, and a cross-repo ledger becomes unreadable after
 compaction.
@@ -166,8 +236,9 @@ already hold. Don't write the ledger yourself line-by-line; have whichever subag
 dispatch or verifier) append its own `STAT` line as its last action before reporting back, so no
 extra round trip is spent on it. For a line the controller itself is responsible for (a task it
 implemented directly at score 8-10, or the rollup edit), batch pending lines and dispatch a single
-`claude-haiku-4-5-20251001` subagent via `Workflow` to append them once per task or per milestone
-rather than editing the ledger file yourself.
+`claude-haiku-4-5-20251001` subagent via `Workflow` to append them, batched once per milestone —
+never once per task, which pays full dispatch overhead to save what would have been a cheaper
+direct `Edit` call — rather than editing the ledger file yourself.
 
 ## 7b — Cross-repo execution
 
@@ -233,11 +304,22 @@ Execute tasks sequentially until the milestone is complete, then **hard stop** a
 
 Wait for explicit input. Do not decompose the next milestone until approved.
 
-## 9 — If the Workflow opt-in is declined
+## 9 — If the dispatch tool is unavailable
 
-The Workflow tool needs the user's multi-agent opt-in. If declined, **degrade to a
-single-context executor**: do each task yourself with the same verify / fix / regression loop,
-and say so plainly. Do not silently fall back to a weaker process.
+The dispatch tool needs the user's multi-agent opt-in, and on some harnesses it is absent or named
+differently. Either way — opt-in declined, tool missing, or a dispatch that errors on the model
+parameter — **degrade to a single-context executor**: do each task yourself with the same
+verify / fix / regression loop, and say so plainly. Do not silently fall back to a weaker process.
+
+**Check once, up front, not per dispatch.** Confirm the dispatch tool is actually there before §1's
+budget projection, and state which mode the run is in. A milestone that projects a multi-tier cost
+and then executes single-context has misreported its cost to the user; a run that discovers the
+missing tool at task 7 has wasted the six briefs it wrote for subagents that never existed.
+
+Degraded mode changes the economics, so say so: one context means one cache namespace and no
+briefing overhead, but every task now runs at the controller's tier. Tighten scope per task to
+compensate, and expect the ledger's `model=` column to read `controller` throughout — that is
+correct in this mode, not a cap violation.
 
 ## 10 — Finish
 

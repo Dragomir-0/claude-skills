@@ -17,6 +17,14 @@ branch ready for a pull request.
 Execute the steps **in this exact order**. Steps marked **HARD PAUSE** stop and wait for the
 user — do not run the next git command until they answer.
 
+**Telegraph before acting.** Say what you are about to do, before you do it, in one short line —
+ahead of each significant step (a stash, a branch, a doc refresh, a commit, a push), not every
+command. As few tokens as possible; say what, not why; no preamble and no trailing summary. This
+matters more here than anywhere else in the pipeline: every step touches git state, and the user is
+reading a terminal where tool calls are invisible. A `git` command that runs unannounced is one they
+cannot stop until it has already happened. Telegraphing never replaces a **HARD PAUSE** — before
+anything destructive or shared (stash, force-anything, push), telegraph *and stop*.
+
 ## Scope — one repo or several
 
 Run `map.mjs workspace` first.

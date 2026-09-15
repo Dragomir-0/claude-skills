@@ -15,6 +15,43 @@ Same four factors, same 1-10 scale, applied at whichever grain the calling skill
 
 ---
 
+## Model reference
+
+**This table is the single source of truth for model IDs across every pipeline skill.** A skill may
+repeat an ID inline where it actually specifies a dispatch, but this table wins on any disagreement,
+and a model change is made here first. Verified against the `claude-api` skill's model table
+(cached 2026-06-24).
+
+| Tier | Model ID | Context | Input $/MTok | Output $/MTok |
+|---|---|---|---|---|
+| Opus 5 (controller) | `claude-opus-5` | 1M | $5 | $25 |
+| Sonnet 5 | `claude-sonnet-5` | 1M | $2 | $10 |
+| Haiku 4.5 | `claude-haiku-4-5-20251001` | **200K** | $1 | $5 |
+
+**Haiku 4.5 has one-fifth the context of every other tier.** Nothing else in this pipeline runs
+below 1M, so this is the only tier where a brief plus its file set can overflow. The four factors
+below score *difficulty*, never *size in tokens* — a trivially simple edit inside a very large file
+scores 1-3 and still will not fit. See the task-level gate below.
+
+**`claude-haiku-4-5-20251001` is the Claude Code harness ID.** The Claude API's own model table
+names this model `claude-haiku-4-5` and says never to append date suffixes. Both are real; they
+describe different surfaces. These skills dispatch through the harness, so the dated form is the
+correct one here — do not "fix" it to the API form, and do not use the harness form in API code.
+
+**Fable 5.1 (`claude-fable-5-1`, $10/$50) is deliberately not used.** It is the most capable model
+available and twice Opus 5's price. Opus 5 is this pipeline's ceiling by choice, not by oversight:
+nothing in planning or execution has yet been shown to fail at Opus 5 in a way Fable 5.1 would fix.
+Revisit only with evidence of a specific Opus 5 failure, never as a default upgrade.
+
+**Do not invent dispatch parameters.** `effort`, `thinking`, and per-request budgets are Claude API
+request fields; whether the harness's dispatch tool exposes any of them is **unverified**. Never
+write an instruction telling a skill to pass a parameter that has not been confirmed to exist on the
+dispatch surface — a fabricated parameter is silently dropped and reads as authoritative to the next
+session. Control cost through what is verifiable: which tier is dispatched, how tightly the brief is
+scoped, and how much context it carries.
+
+---
+
 ## The four factors
 
 Score each 1-10. Anchor against these descriptions rather than guessing a number — consistency
@@ -59,9 +96,12 @@ understood.
 
 ## Resolving ambiguity before scoring
 
-Never round Ambiguity down to keep the total low — that just means the question wasn't asked yet.
-Each calling skill already has its own hook for this, so don't duplicate it here, just don't skip
-it:
+Never round a factor down to keep the total low, Ambiguity least of all — that just means the
+question wasn't asked yet. The same conflict of interest applies to all four: the model scoring its
+own task has an incentive to under-score whichever factor would trigger a model-switch or a
+subagent cap it would rather avoid. When genuinely uncertain between two adjacent values for any
+factor, round up. Each calling skill already has its own hook for resolving open questions before
+scoring, so don't duplicate it here, just don't skip it:
 
 - `plan-feature`'s ingestion step already has the empty-ticket rule and the vague-description rule
   — satisfy those before scoring, not instead of scoring.
@@ -118,6 +158,26 @@ accordingly:
 Record the score on the task's ledger line (`score=<n>`) so a resumed run and any later review can
 see why a task was dispatched where it was, without re-deriving the judgment call.
 
+**Context gate — check before every Haiku dispatch.** The score says how hard the task is, not how
+much text it takes to do. Before dispatching a 1-3 task to Haiku, estimate the brief plus every file
+the task must read against Haiku's **200K** window (see Model reference above). If it does not
+comfortably fit, dispatch `claude-sonnet-5` instead and note `ctx=overflow` on the ledger line — the
+score is unchanged, only the tier moves. A mechanical rename inside a 6,000-line file is the normal
+case here, not an exotic one.
+
+**The tiers are a cost cascade — judge them on cost per *completed task*, not per dispatch.** Haiku
+is half Sonnet's price per token, which is a narrower margin than it looks once a failed attempt is
+priced in: a 1-3 task that fails at Haiku and is retried at Sonnet with findings (§4's ladder) has
+already cost two dispatches plus the controller's adjudication to save half the tokens on the first
+one. Two further costs are easy to miss — prompt caches are **model-scoped**, so each tier a
+milestone touches is a separate cache namespace that re-pays for the same plan and map context, and
+every dispatch pays its own briefing overhead regardless of tier.
+
+Consequence: **score down to Haiku only when the task is genuinely mechanical and likely to land
+first try.** When a 1-3 is borderline, or the same brief has already failed once at any tier, send it
+to Sonnet. The cheapest run is the one that does not repeat itself, and a same-tier retry buys
+nothing but another bill.
+
 ## Grading-level use (test-feature, kevin)
 
 Neither skill computes its own complexity score — both reuse the **feature-level** score
@@ -129,12 +189,31 @@ design rigor without a second scoring pass.
 | any | test-feature optimism 1-3; kevin `--plan`/`--domain` | Sonnet 5 |
 | 8-10 | test-feature optimism 4-5 | Opus 5 |
 | 4-7 (or no plan / no `**Complexity:**` line) | test-feature optimism 4-5 | Sonnet 5 |
-| any | kevin `--e2e` | Sonnet 5 minimum; Opus 5 recommended past ~5 domains |
+| kevin `--e2e`, map lists ~5 domains or fewer | kevin `--e2e` | Sonnet 5 |
+| kevin `--e2e`, map lists more than ~5 domains | kevin `--e2e` | Opus 5 |
 
 Same protocol as the feature-level gate: check the session's actual model against the required
 tier before doing the substantive grading; if it falls short, tell the user and ask them to switch
-(`/model`), waiting rather than proceeding by default. If they explicitly choose to proceed anyway,
-note it in the report header, the same way `plan-feature` notes a below-tier design.
+(`/model`), waiting rather than proceeding by default — the `--e2e` Opus floor past ~5 domains is a
+hard requirement, not a recommendation the model can silently skip. If they explicitly choose to
+proceed anyway, note it in the report header, the same way `plan-feature` notes a below-tier design.
 
 Neither skill dispatches subagents at any tier — this gate is purely about the interactive
 session's own model, identical in spirit to the feature-level gate above.
+
+## Map-level use (map-codebase)
+
+`map-codebase` has no complexity score to peg to — no feature or task exists yet when a map is
+built or refreshed — so this gate is a flat floor rather than a table:
+
+| Mode | Required session model |
+|---|---|
+| Full build, `--update` | Sonnet 5 |
+| `--verify` | none — a zero-token deterministic script check, no model reasoning involved |
+
+Writing a domain map is judgment work (deciding whether a doc or a directory name wins, synthesizing
+`## Flow:` narratives, enumerating side effects correctly) whose failure mode is a confidently-wrong
+map that poisons every plan built on it downstream. Same protocol as above: check the session's
+actual model before doing the substantive work; if it falls short, tell the user and ask them to
+switch (`/model`), waiting rather than proceeding by default. If they explicitly choose to proceed
+anyway, note it in `index.md`'s header.

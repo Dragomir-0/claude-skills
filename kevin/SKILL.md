@@ -7,7 +7,7 @@ description: >
   along the way. Reads a FEATURE_PLAN or the codebase map to know what's meant to do, never
   source. Triggered by /kevin.
 disable-model-invocation: false
-allowed-tools: Bash, Read, Write, Glob, Grep, Skill, AskUserQuestion, Artifact, Workflow
+allowed-tools: Bash, Read, Write, Glob, Grep, Skill, AskUserQuestion, Artifact, Workflow, mcp__claude-in-chrome, mcp__plugin_chrome-devtools-mcp_chrome-devtools
 ---
 
 # kevin
@@ -94,9 +94,10 @@ computed at design time, reused here rather than scored again.
 `--domain` mode has no plan and therefore no complexity line — apply the table's flat Sonnet-5
 floor.
 
-`--e2e` mode always requires at least Sonnet 5, and Opus 5 is recommended once the map lists more
-than about five domains — §6.1's cost checkpoint already counts the domains, so check the floor
-there in the same breath as naming the cost.
+`--e2e` mode always requires at least Sonnet 5, and Opus 5 is required once the map lists more than
+about five domains — §6.1's cost checkpoint already counts the domains, so check the floor there in
+the same breath as naming the cost. This is a hard gate, same as every other row in this table: no
+silently running an `--e2e` pass over five domains on Sonnet because the count "felt close enough."
 
 Check the required tier against the model actually powering this session. If it falls short, tell
 the user and ask them to switch (`/model`) before proceeding, and wait — don't run an `--e2e` pass
@@ -108,14 +109,27 @@ proceed anyway, note it in the report's header.
 Invoke the `run` skill to launch, or confirm, the app. If it needs a base URL you don't have,
 **hard pause** and ask rather than guessing a port.
 
-Invoke the `claude-in-chrome` skill before touching any `mcp__claude-in-chrome__*` tool — it
-gates on site permissions that need to be set up first.
+**Establish the browser surface before anything else — do not assume a tool name.** Kevin cannot
+run without one, and which one is present varies by machine and by session. Check, in order, and use
+the first that is actually available:
+
+1. **Claude in Chrome** — the `claude-in-chrome` skill plus `mcp__claude-in-chrome__*` tools. Invoke
+   the skill before touching any of its tools; it gates on site permissions that must be set up
+   first.
+2. **Chrome DevTools MCP** — the `chrome-devtools-mcp:chrome-devtools` skill plus
+   `mcp__*chrome-devtools__*` tools (`navigate_page`, `click`, `fill`, `take_snapshot`,
+   `take_screenshot`). Invoke that skill first for the same reason.
+
+**Neither available → stop and say so.** Name which surface you looked for and ask the user to
+enable one. Do not fall back to `curl`, to reading source, or to reasoning about what the UI probably
+does — a Kevin report is only worth anything if a real browser actually drove the real app, and an
+imagined pass is worse than no report. This is the same hard-pause as a missing base URL above.
 
 **Test data only.** Never submit to a real payment processor, a real outbound email/SMS
 recipient, or anything that notifies a real third party. If the flow requires one of these, ask
 for a safe target (sandbox mode, a test card, an address you control) before proceeding.
 
-**Native mobile frontend (nothing `claude-in-chrome` can reach).** Before writing that ground off
+**Native mobile frontend (nothing a browser surface can reach).** Before writing that ground off
 as unreachable, check for a connected device: `adb devices` (Android SDK platform-tools; if `adb`
 isn't on `PATH`, it's usually under the SDK's `platform-tools/` — locate it once, then prepend it
 for the rest of the run). A connected, authorized device — physical or emulator — turns the mobile
@@ -290,9 +304,12 @@ not the developer reading the Correction Plan — a different audience from the 
 formatting/writing task over already-decided inputs (title, acceptance criteria, the clean
 screenshots), not a judgment call about the feature itself. Dispatch it — loading
 `artifact-design`, writing the HTML, and calling the `Artifact` tool — to a subagent pinned to
-`claude-haiku-4-5-20251001` via the `Workflow` tool. Always specify the model explicitly; an
-omitted model inherits the session's own. Hand its brief the plan's title/acceptance criteria, the
+`claude-haiku-4-5-20251001` (ID per `complexity-scoring.md` § Model reference). Always specify the
+model explicitly; an omitted model inherits the session's own. Hand its brief the plan's
+title/acceptance criteria, the
 base64-encoded screenshots per step, and the rules above (audience, voice, what never to mention).
+If the dispatch tool isn't available (it needs the user's multi-agent opt-in), draft and publish
+in-session and say so — the announcement is the deliverable; the cheaper model is an optimisation.
 It reports back the published URL for you to print alongside the report's path.
 
 ## 6 — End-to-end mode (`--e2e`)
@@ -310,7 +327,8 @@ applied per-flow below.
   cost-discipline section requires before any multi-x jump. Naming only the domain/flow count and
   leaving out the per-domain critique understates what's actually being approved.
 - State the required model floor from §0b in the same breath — `--e2e` needs at least Sonnet 5,
-  Opus 5 recommended past ~5 domains.
+  Opus 5 **required** (not just recommended) past ~5 domains. If the session is below the floor for
+  the domain count just counted, stop here and ask the user to switch (`/model`) before continuing.
 - **Ask before proceeding.** This runs every time, regardless of how few domains the map has —
   `--e2e` *is* the multi-x jump that checkpoint exists for, not a case that might be small enough
   to skip it.
@@ -393,10 +411,17 @@ rather than published once per feature.
 
 **Model.** Same reasoning and dispatch as §5's Model note: the domain grading is done by this
 point, so drafting/regenerating `ONBOARDING.md` and publishing it goes to a `claude-haiku-4-5-20251001`
-subagent via `Workflow`, given each domain's map functional description, the screenshots, the
+subagent, given each domain's map functional description, the screenshots, the
 existing artifact-comment URL (if any), and the voice/content rules above. It performs the
 read-before-republish itself in the same dispatch and reports back the URL and whether the comment
 needs updating.
+
+**Watch the context on this one.** Haiku 4.5's window is 200K — one-fifth of every other tier (see
+`complexity-scoring.md` § Model reference) — and this is the pipeline's heaviest brief: every
+domain's description plus every screenshot, in a mode that only runs when there are many domains.
+Encoded screenshots are the bulk of it. Split the work per domain across several dispatches, or step
+the drafting up to `claude-sonnet-5`, rather than handing one Haiku subagent the whole project and
+discovering the ceiling mid-run.
 
 ## Common mistakes
 
