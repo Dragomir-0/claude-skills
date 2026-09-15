@@ -4,9 +4,11 @@ description: >
   Execute an approved FEATURE_PLAN milestone by milestone: decompose into atomic tasks,
   dispatch capped subagents via the Workflow tool under a hard token ceiling, verify every
   result as controller, re-evaluate regressions, and hard-pause at each milestone for user
-  testing. Triggered by /execute-plan.
-disable-model-invocation: true
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Workflow, AskUserQuestion, TaskCreate, TaskUpdate
+  testing. With --roadmap, works through every Active item in .claude/roadmap.md instead,
+  looping build / test-feature / kevin / corrections per item until both come back clean.
+  Triggered by /execute-plan.
+disable-model-invocation: false
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Workflow, Skill, AskUserQuestion, TaskCreate, TaskUpdate
 ---
 
 # execute-plan
@@ -18,12 +20,15 @@ source of truth. Artifact paths and cost discipline come from
 
 ## 0 — Gate
 
+- **`--roadmap` passed?** Skip everything below — go to §11 instead. Roadmap mode processes
+  several plans; the rest of this gate through §10 governs a single plan.
 - **If plan mode is active, STOP:** "execute-plan implements an approved plan — approve it
   first." This skill executes; it does not write plans.
 - **Locate the plan:** an explicit argument, else the newest `.claude/plans/FEATURE_PLAN_*.md`
   (check the container as well as the current repo), else ask. Read it **once** and extract the
-  selected tier, its File Impact Manifest, its milestones, the test cases, and the contingency
-  section.
+  selected tier, its File Impact Manifest, its milestones, the test cases, the contingency
+  section, and — if present — its `## Design Direction`. Its absence means the plan was judged
+  non-UI at planning time; don't invent one.
 - **Determine the repo set** from the plan's `**Repos:**` line and the manifest's Repo column.
   One repo → everything below behaves as it always has. Several → see *Cross-repo execution*.
 - **Conflict scan, one shot:** read the plan for contradictory tasks or plan-mandated defects.
@@ -64,7 +69,9 @@ whatever separates out — Opus itself is never a subagent's model, only the con
 Break the current milestone into the **smallest possible single-step atomic tasks** — "create
 interface X", "implement method Y", "update unit test Z". For each, write a self-contained brief:
 goal, files, interfaces produced by earlier tasks, acceptance criteria, the plan's global
-constraints, and the model tier.
+constraints, and the model tier. If the plan carries a `## Design Direction` and the task touches
+a UI file, include it verbatim in the brief's global constraints — this is what keeps every UI
+task visually consistent without each subagent re-deriving style choices on its own.
 
 Score each task against its own brief using the task-level rubric in
 `~/.claude/skills/_shared/complexity-scoring.md`, then dispatch accordingly:
@@ -107,8 +114,9 @@ expensive model.
 2. the plan's global constraints and test cases.
 
 Check adherence to the architecture map, syntax correctness, logical errors, and alignment with
-the atomic task goal. Large diff → dispatch a dedicated `claude-sonnet-5` verifier subagent to
-keep your context clean. Small diff → verify inline.
+the atomic task goal — and, for a UI diff, adherence to the plan's Design Direction (style,
+palette, typography, component patterns). Large diff → dispatch a dedicated `claude-sonnet-5`
+verifier subagent to keep your context clean. Small diff → verify inline.
 
 If errors are found, return a **strict list of corrections** to feed into the next attempt.
 
@@ -143,6 +151,14 @@ records the branch name for each repo.
 Keep a rollup at the top of the section: dispatches by tier, verifier count, total fix rounds,
 cumulative tokens against the 350k ceiling, and a per-repo task count. A `model=` value above
 `sonnet-5` on a subagent or verifier line is a cap violation and a red flag.
+
+**Model.** Appending these lines is pure bookkeeping — no judgment beyond copying values you
+already hold. Don't write the ledger yourself line-by-line; have whichever subagent just ran (task
+dispatch or verifier) append its own `STAT` line as its last action before reporting back, so no
+extra round trip is spent on it. For a line the controller itself is responsible for (a task it
+implemented directly at score 8-10, or the rollup edit), batch pending lines and dispatch a single
+`claude-haiku-4-5-20251001` subagent via `Workflow` to append them once per task or per milestone
+rather than editing the ledger file yourself.
 
 ## 7b — Cross-repo execution
 
@@ -221,6 +237,66 @@ only when **all** acceptance criteria and test cases pass — evidence before as
 off to `superpowers:finishing-a-development-branch`, or report status plainly if the target is
 not git.
 
+## 11 — Roadmap execution
+
+`/execute-plan --roadmap [--optimism <1-5>]`. A roadmap is just a list of feature plans — the
+register at `.claude/roadmap.md` (container-level too, in a workspace) that `plan-feature` writes.
+This mode works through it instead of a single plan, converging each item before moving to the
+next.
+
+**Locate the register.** If `.claude/roadmap.md` doesn't exist, say so and stop — there is
+nothing to execute. Read every row.
+
+**Select rows.** Only rows with Status `Active` are in scope, in the order they appear in the
+file — that order is the user's own priority, not something to re-sort. Skip `Future` rows: print
+which were skipped and that `plan-feature`'s Design checkpoint means they aren't meant to be built
+yet. Skip rows already `Done`. If nothing is `Active`, say so and stop.
+
+**Before starting, name the cost.** Print how many `Active` rows were found. Each one runs its own
+full build plus a test-feature/kevin convergence loop that can itself repeat several rounds — this
+is a multi-x spend over a single-plan run, the contract's escalation checkpoint. State that plainly
+before the first item starts.
+
+### Per-item convergence loop
+
+For each selected row, in order:
+
+1. **Build.** Run §0 through §10 exactly as normal against that row's Plan path. Nothing about
+   milestone execution changes in roadmap mode — the same per-milestone hard stop in §8 still
+   applies; roadmap mode does not run milestones unattended.
+2. **Grade the diff.** Invoke the `test-feature` skill (`Skill` tool) with
+   `--plan <path> --optimism <n>` (`<n>` is the roadmap invocation's `--optimism`, default 3).
+   `test-feature` never spawns subagents by its own rule — nothing extra to enforce here.
+3. **Grade the live app.** Invoke the `kevin` skill (`Skill` tool) with `--plan <path>`.
+4. **Check convergence** against both reports:
+   - **test-feature clean** — Verdict is not "do not ship", and Critical Failures is empty.
+     (Warnings may remain; those aren't the "major errors" this loop gates on.)
+   - **kevin clean** — Verdict is not "broken", every acceptance criterion/milestone in Coverage
+     is marked exercised (none partial or unreachable — a gap there means Kevin never actually
+     reached part of the feature, the opposite of understanding it completely), and Issues
+     contains no **Critical** entries. (Confusing/Minor may remain.)
+   - Both conditions must hold together.
+5. **Converged** → set the row's Status to `Done` in `.claude/roadmap.md`, print a short summary
+   (what shipped, any remaining Warnings/Confusing/Minor items left for a human to judge), then
+   **hard pause**: ask the user before starting the next `Active` row. Do not auto-advance.
+6. **Not converged** → merge the two reports' Correction Plans into one de-duplicated, repo-tagged
+   task list, and run it through this skill's own §3–§6 decompose/dispatch/verify loop as a
+   synthetic milestone. Log it on the item's ledger as its own round:
+   ```
+   CORRECTIONS | round=<k> | source=test-feature+kevin | items=<n>
+   ```
+   Then repeat from step 2 — re-grade with fresh test-feature and kevin runs; a correction can
+   introduce a new problem as easily as it fixes the reported one.
+7. **Round ceiling.** 5 correction rounds per item. Reaching it without converging is a hard stop,
+   not a silent continuation: report what's still failing after 5 rounds and ask the user how to
+   proceed — raise the ceiling, accept the item as-is, or drop it from this run. Never loop past it
+   unasked.
+
+**Resuming a roadmap run.** `.claude/roadmap.md`'s Status column is the resume state — rows already
+`Done` are skipped, `Active` rows pick back up at step 1. Check the item's own
+`.claude/plans/<Name>.ledger.md` for the highest `CORRECTIONS round=` line to know which round to
+resume from rather than restarting the loop at round 1.
+
 ## Red flags — STOP
 
 | About to… | Reality |
@@ -236,7 +312,15 @@ not git.
 | Dispatch a task without naming its repo and branch | It will edit the wrong repository. Always state both. |
 | Call a cross-repo milestone done after verifying each repo alone | Each repo passing is not the repos agreeing. Check the contract. |
 | Treat contract regeneration as tidy-up after the "real" work | It is the change. Dispatch and verify it as a task. |
+| Verify a UI diff without checking it against the plan's Design Direction | Style drift compounds silently across milestones — check it every time the plan carries one, not just once. |
+| Mark a roadmap item Done because the build finished | Done means test-feature *and* kevin both came back clean. Check both. |
+| Run milestones unattended because "it's roadmap mode" | The per-milestone hard stop in §8 is unchanged in roadmap mode. |
+| Auto-advance to the next roadmap item without asking | §11 step 5 is a hard pause. Ask before starting the next item. |
+| Keep looping corrections past the round ceiling | 5 rounds, then stop and ask. Never loop past it unasked. |
+| Execute a `Future` roadmap row | Skip it — plan-feature's Design checkpoint means it isn't meant to be built yet. |
 
 ## Next step
 
-`/test-feature --plan <path> --optimism <1-5>` grades the result. Name it; do not invoke it.
+Single-plan mode: `/test-feature --plan <path> --optimism <1-5>` grades the result. Name it; do
+not invoke it. Roadmap mode (§11) already invokes `test-feature` and `kevin` itself as part of the
+convergence loop — nothing further to name once a run finishes.

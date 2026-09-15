@@ -5,8 +5,10 @@ This file is read by all six pipeline skills — `map-codebase`, `plan-feature`,
 defined. A skill that needs to know where something lives cites a section here rather than
 restating it, so a path change is a one-file edit.
 
-The chain is a convention, not an automation. No stage invokes the next; each ends by naming the
-command that would typically follow.
+The chain is a convention, not an automation: no stage invokes the next; each ends by naming the
+command that would typically follow. **The one exception is `/execute-plan --roadmap`**, which
+invokes `test-feature` and `kevin` itself as part of its own per-item convergence loop — see
+`execute-plan`'s §11.
 
 ```
 /map-codebase  →  /plan-feature  →  /execute-plan  →  /test-feature  →  /cleanup-crew
@@ -17,15 +19,18 @@ command that would typically follow.
 
 `test-feature` grades the diff against the plan; `kevin` grades the running app against the same
 plan through its actual UI, as a careless first-time user. Both read the same plan, both feed
-`/execute-plan`'s correction loop, and both are optional passes an operator chooses to run — the
-diagram branches, it doesn't gate.
+`/execute-plan`'s correction loop, and both are optional passes an operator chooses to run in
+single-plan mode — the diagram branches, it doesn't gate. In roadmap mode, both run automatically
+every convergence round; nothing is optional there.
 
 ---
 
 ## Artifact locations
 
 All artifacts live inside the **target repo**, not the user profile, so their file paths stay
-relative to the code they describe. All are gitignored.
+relative to the code they describe. All are gitignored, **except `ONBOARDING.md`** — it is a
+people-facing doc meant to be checked in, not a pipeline working file, so `map-codebase` must
+never add it to `.gitignore` and a repo's own `.gitignore` should not either.
 
 | Artifact | Path | Written by | Read by |
 |---|---|---|---|
@@ -33,9 +38,12 @@ relative to the code they describe. All are gitignored.
 | Domain maps | `.claude/maps/<domain>.md` | map-codebase | plan-feature, execute-plan |
 | Map index + search hints | `.claude/maps/index.md` | map-codebase | all |
 | Feature plan | `.claude/plans/FEATURE_PLAN_<Name>.md` | plan-feature | execute-plan, test-feature |
+| Roadmap register | `.claude/roadmap.md` | plan-feature, execute-plan | plan-feature, execute-plan |
 | Execution ledger | `.claude/plans/<Name>.ledger.md` | execute-plan | execute-plan (resume), test-feature |
 | Test report | `.claude/reports/TEST_REPORT_<Name>.md` | test-feature | execute-plan (correction loop) |
 | Kevin (UAT) report | `.claude/reports/KEVIN_REPORT_<Name>.md` | kevin | execute-plan (correction loop) |
+| Kevin E2E report | `.claude/reports/KEVIN_REPORT_e2e-<ISO date>.md` | kevin (`--e2e`) | execute-plan (correction loop) |
+| Onboarding doc | `ONBOARDING.md` (repo or workspace root) | kevin (`--e2e`) | people, via `ShareOnboardingGuide` |
 
 `map-codebase` ensures the repo's `.gitignore` contains these three entries, adding any that are
 absent:
@@ -45,6 +53,26 @@ absent:
 .claude/plans/
 .claude/reports/
 ```
+
+`plan-feature` separately ensures `.claude/roadmap.md` is present in the same `.gitignore`,
+adding it if absent — it's a single file, not a folder, so it falls outside the three entries
+above.
+
+The roadmap register is a plain markdown table, one row per roadmap item, append-or-update
+(never duplicated) by `<Name>`:
+
+```
+| Name | Title | Status | Plan |
+|---|---|---|---|
+| 12345 | Asset barcode import | Active | .claude/plans/FEATURE_PLAN_12345.md |
+| asset-export-v2 | Asset export v2 | Future | .claude/plans/FEATURE_PLAN_asset-export-v2.md |
+| 12200 | Asset export v1 | Done | .claude/plans/FEATURE_PLAN_12200.md |
+```
+
+Status is one of `Active`, `Future`, or `Done`. `plan-feature` writes a row as `Active` or
+`Future`; `execute-plan --roadmap` is the only skill that ever sets `Done`, and only once both
+`test-feature` and `kevin` have come back clean on that item's plan (see its §11). Row order is
+the user's own priority order — no skill re-sorts it.
 
 ---
 

@@ -5,8 +5,8 @@ description: >
   before planning a feature, when no maps exist or a drift check reports cited paths that no
   longer resolve, or when a session would otherwise have to read source to learn how a feature
   flows end to end. Invoked as /map-codebase.
-disable-model-invocation: true
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Artifact
+disable-model-invocation: false
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Artifact, Workflow
 ---
 
 # map-codebase
@@ -216,6 +216,19 @@ source of truth that `/plan-feature` and `/execute-plan` read; the artifact is t
 can open and share without cloning the repo. One artifact per file, `index.md` included — a run
 that writes seven files publishes seven artifacts.
 
+### Model
+
+By the time a map reaches this section its content is finished and has passed `verify` — nothing
+left in the publish step is a judgment call, it is a mechanical read-URL/call-tool loop. Dispatch
+it to a subagent pinned to `claude-haiku-4-5-20251001` via the `Workflow` tool rather than doing
+it in-session: one dispatch per file, or one dispatch handling the whole batch when several maps
+changed in a run. Always specify the model explicitly — an omitted model inherits the session's
+own. Hand the subagent's brief the file's path, its `description` and (first publish only)
+`favicon`, and — for a republish — the existing URL from `## Published artifacts`; have it perform
+the `action: "read"` on that URL itself before publishing, in the same dispatch, since the refusal
+to overwrite an unread artifact is checked against whoever is about to call publish. It reports
+back the URL(s); fold those into `## Published artifacts` yourself as normal.
+
 **Publish the `.md` file itself.** This is the explicit skill instruction the Artifact tool's
 format rule requires, and it is deliberate: rendering a map as HTML would fork its content, and a
 forked copy drifts from the file `verify` checks. Pass the map's path straight to the Artifact
@@ -284,6 +297,8 @@ One cheap `Glob` batch decides this. **Never re-walk the tree "to make sure."**
 - Finishing without running `verify`, or without updating the ledger.
 - Regenerating every map on `--update` when the script named one.
 - Finishing a build without publishing the maps, or publishing on `--verify`.
+- Publishing in-session instead of dispatching the Haiku-pinned subagent from `## Publishing ›
+  Model` — the publish step is mechanical and doesn't need the session's own model.
 - Publishing without `url` on a rebuild — that creates a duplicate artifact and strands the link
   people already have.
 - Converting a map to HTML to publish it, forking it from the file on disk.

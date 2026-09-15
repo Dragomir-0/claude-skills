@@ -5,8 +5,8 @@ description: >
   measuring real coverage at level 3 and above, judging test effectiveness, and checking
   completeness, security, deployment, pipeline and efficiency vectors. Writes only a test
   report, never source. Triggered by /test-feature.
-disable-model-invocation: true
-allowed-tools: Bash, Read, Write, Glob, Grep, Skill, AskUserQuestion
+disable-model-invocation: false
+allowed-tools: Bash, Read, Write, Glob, Grep, AskUserQuestion
 ---
 
 # test-feature
@@ -207,10 +207,11 @@ with no reasoning. If the code is clean, say so — do not invent issues.
 
 ## 7 — Correctness pass
 
-Invoke the `code-review` skill via the Skill tool on the same diff, in **report-only** mode —
-never `--fix`, never `--comment`. It runs in this same session, not a subagent. De-duplicate its
-findings against your own before reporting. If it is unavailable or errors, say so and review the
-diff yourself for the same concerns.
+Never invoke the `code-review` skill (or `/code-review`) from here, in any mode — it launches as a
+background/forked subagent regardless of its own or the project's no-subagent instructions, which
+this skill's evidence trail cannot tolerate. Instead, apply `code-review`'s own dimensions to the
+same diff yourself, inline, in this session: correctness bugs, reuse/simplification opportunities,
+and efficiency cleanups. De-duplicate against findings you already made in §4–§6 before reporting.
 
 ## 8 — Output
 
@@ -252,7 +253,7 @@ For a cross-repo feature the report goes to `<container>/.claude/reports/TEST_RE
 - Quoting a coverage number without the command output that produced it.
 - Reporting "tests pass" when the build actually failed.
 - Skipping a mandatory vector because the optimism level is low. Scale intensity, never skip.
-- Running `/code-review` with `--fix`.
+- Invoking `/code-review` or the `code-review` skill at all — it forks a subagent regardless of mode; do the correctness pass inline instead.
 - Applying the .NET checklist to a Flutter or Node repo — or to the wrong repo in a workspace.
 - A Correction Plan that `/execute-plan` cannot decompose, or one that omits the repo per item.
 - Declaring a cross-repo change clean because each repo passed its own tests. Check the contract.

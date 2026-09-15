@@ -4,8 +4,8 @@ description: >
   Turn an Azure DevOps ticket or a written description into a three-tier implementation plan
   with File Impact Manifests, scored effort, milestones and hard pauses. Reads the architecture
   maps; writes only the plan file, never source. Triggered by /plan-feature.
-disable-model-invocation: true
-allowed-tools: Bash, Read, Write, Glob, Grep, AskUserQuestion, EnterPlanMode, ExitPlanMode
+disable-model-invocation: false
+allowed-tools: Bash, Read, Write, Glob, Grep, AskUserQuestion, EnterPlanMode, ExitPlanMode, Skill
 ---
 
 # plan-feature
@@ -31,6 +31,23 @@ about scope, intent, acceptance criteria, constraints, or tradeoffs between appr
 open, ask about it rather than picking a reasonable-looking default. A plan built on a silent
 assumption is wrong in a way that's expensive to discover later; a clarifying question costs a
 few seconds. When in doubt, ask one more question than feels strictly necessary.
+
+### Feature classification (ask first)
+
+Before touching ADO or a description, ask via `AskUserQuestion`: is this a **standalone
+feature** or a **roadmap item** (one piece of a larger, multi-feature initiative)? **Hard
+pause** — wait for the answer.
+
+If the answer is roadmap item, ask a second `AskUserQuestion`: is it an **active** item (in
+scope now) or a **future** item (planned, not yet being built)? **Hard pause** — wait for the
+answer.
+
+Carry both answers through the rest of this skill:
+
+- Recorded in the plan header (Section 6) as a **Classification:** line.
+- A roadmap item is also registered in `.claude/roadmap.md` — see the pipeline contract's
+  artifact table and Section 6's Roadmap register.
+- A **future** roadmap item changes how Sections 4 and 5 read — see the callouts there.
 
 ### From Azure DevOps (`--ado <id>`)
 
@@ -131,6 +148,25 @@ product — and this feature may span more than one of them.
 
 If it exits 4, the target is a single repo. Everything below behaves exactly as before.
 
+## 2b — Design direction
+
+Skip this step entirely for a feature with no user-facing UI surface — a pure API, data,
+background-job, or infra change. Judge this from the feature description and the map's stack
+info (Section 2): if the affected repo(s) carry a frontend stack (React, Vue, Blazor, WPF,
+SwiftUI, etc.) and the feature adds or changes a screen, page, view, or component, it's
+UI-touching.
+
+For a UI-touching feature, invoke the `ui-ux-pro-max` skill (`Skill` tool) with the feature's
+description, target stack, and any existing style/brand constraints from the repo's docs. Ask it
+for a **Design Direction**, not a mockup: the style, color palette, typography, and key component
+patterns this feature should follow, in a short paragraph plus a bullet list — a few sentences,
+not a full spec. This keeps Tier 1 and Tier 2 (Section 3) building against the same visual
+direction instead of each tier improvising separately.
+
+Record the result in the plan as `## Design Direction`, placed after the header lines and before
+Tier 1. Omit the heading entirely for a non-UI feature — its absence tells `/execute-plan` there's
+nothing to carry into task briefs.
+
 ## 3 — Three-tier design engine
 
 Produce exactly three tiers.
@@ -202,6 +238,11 @@ session:
 > **HARD STOP.** Do not begin the next milestone. Ask the user to test the feature up to this
 > point and wait for explicit approval before continuing.
 
+**Future roadmap items skip the per-milestone HARD STOP.** The plan still needs testable
+milestones — a future item will eventually be executed — but pausing to ask for approval makes
+no sense on work nobody is running yet. Drop the blockquote above for a future item and place a
+single note in Contingency (Section 5) instead.
+
 ## 5 — Contingency
 
 Close the plan with:
@@ -211,6 +252,10 @@ Close the plan with:
   approach hits a blocker mid-execution.
 - **Validation gate** to run before the work is considered done: branch pseudo-build → runtime
   tests → `/code-review` → `/test-feature`. Proceed to merge only if all are clean.
+- **Future roadmap items** get a **Design checkpoint** note here instead of the milestones'
+  HARD STOPs: state plainly that this plan is forward design, not scheduled work, and that
+  `/execute-plan` must not run against it until the item is reclassified active and a human has
+  re-confirmed the plan still matches the current codebase — maps and code may have moved on.
 
 ## 6 — Output
 
@@ -221,6 +266,9 @@ parsing the manifest.
 
 State the ingestion complexity score in a `**Complexity:**` line directly under the title, e.g.
 `**Complexity:** 8/10 (High) — designed under Sonnet 5 (user chose to proceed below the required Opus tier)`.
+
+State the feature classification in a `**Classification:**` line directly under the title:
+`Standalone`, `Roadmap (active)`, or `Roadmap (future)`.
 
 Include the ADO work item ID and title when there is one.
 
@@ -239,9 +287,19 @@ changes, revise within plan mode and call `ExitPlanMode` again — don't write t
 `ExitPlanMode` round is actually approved. This is what leaves plan mode inactive by the time
 `/execute-plan` runs, satisfying its gate.
 
-Required headings, because `/execute-plan` parses them:
+### Roadmap register
+
+If the feature was classified as a roadmap item, after the artifact is written, append or
+update its row in `.claude/roadmap.md` (path and shape defined in the pipeline contract) with
+its `<Name>`, title, status (`Active`/`Future`), and the plan's path. Update the existing row
+for a `<Name>` already present rather than duplicating it — a replan that moves an item from
+Future to Active is a status update, not a new entry.
+
+Required headings, because `/execute-plan` parses them (`## Design Direction` only when Section
+2b actually ran — its absence is meaningful, not an omission):
 
 ```
+## Design Direction
 ## Tier 1 — Status Quo
 ### File Impact Manifest
 ### Milestones
@@ -274,6 +332,16 @@ Required headings, because `/execute-plan` parses them:
 - **Omitting the Repo column** because the feature "is obviously all in one repo".
 - Asserting a simultaneous deploy when the repos ship separately.
 - Trusting a map over the repo's own `CLAUDE.md` / `ONBOARDING.md`.
+- Skipping the standalone-vs-roadmap classification question because the request "obviously"
+  is one or the other.
+- Keeping the per-milestone HARD STOP on a future roadmap item instead of the single Design
+  checkpoint note.
+- Writing a roadmap item's plan without registering it in `.claude/roadmap.md`.
+- Running the design step (2b) on a backend-only feature with no UI surface.
+- Skipping the design step on a feature that adds or changes UI, then letting Tier 1 and Tier 2
+  each invent their own look.
+- Asking `ui-ux-pro-max` for a full mockup instead of a compact Design Direction — it's meant to
+  fit in a paragraph plus bullets, not become its own deliverable.
 
 ## Next step
 

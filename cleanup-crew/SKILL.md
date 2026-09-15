@@ -5,7 +5,7 @@ description: >
   conventional commit and push in preparation for a pull request. Hard-pauses for the base
   branch, the new branch name, any stash conflict, and the composed commit. Triggered by
   /cleanup-crew.
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools: Bash(git *), Read, Write, Edit, Glob, Grep, AskUserQuestion
 ---
 
