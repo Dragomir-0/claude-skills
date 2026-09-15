@@ -24,7 +24,9 @@ me at the decisions that are mine to make.
 `_shared/pipeline-contract.md` holds the artifact paths, repo resolution, `<Name>` derivation and
 cost discipline that these skills read, and `_shared/complexity-scoring.md` holds the shared
 4-factor rubric (scope, ambiguity, risk, uncertainty; 1-10) that `plan-feature` and `execute-plan`
-both score against. **Neither is optional** — the skills reference them by absolute path at
+score against — `test-feature` and `kevin` don't score anything themselves, but reuse that same
+score (read from the plan header) to set their own minimum model tier, so grading rigor tracks
+design rigor. **Neither shared file is optional** — the skills reference them by absolute path at
 `~/.claude/skills/_shared/`.
 
 ---

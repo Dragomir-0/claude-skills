@@ -25,9 +25,10 @@ subagent for a vector or a repo fragments the evidence trail this report depends
 
 Usage: `/test-feature --plan <path to FEATURE_PLAN_<Name>.md> --optimism <1-5>`
 
-Artifact paths come from `~/.claude/skills/_shared/pipeline-contract.md`. Capture the diff of the
-files listed in the plan's File Impact Manifest — `git diff` plus `git diff --staged`, falling
-back to the working tree if nothing is staged.
+Artifact paths come from `~/.claude/skills/_shared/pipeline-contract.md`. The model floor below
+comes from `~/.claude/skills/_shared/complexity-scoring.md`. Capture the diff of the files listed
+in the plan's File Impact Manifest — `git diff` plus `git diff --staged`, falling back to the
+working tree if nothing is staged.
 
 ## 0 — Locate the plan
 
@@ -44,6 +45,23 @@ back to the working tree if nothing is staged.
 - No feature was named at all → the newest `.claude/plans/FEATURE_PLAN_*.md` (container too, in a
   workspace).
 - Still nothing usable → ask.
+
+## 0b — Model floor
+
+Read the plan's `**Complexity:**` line (from the plan §0 located, if one was found) and check it
+against the grading-level table in `~/.claude/skills/_shared/complexity-scoring.md`. This reuses
+`plan-feature`'s feature-level score rather than computing a new one — grading rigor should track
+design rigor, and the score is already sitting in the plan header for free.
+
+Check the required tier against the model actually powering this session. If the session already
+meets or exceeds it, continue. If not, tell the user the plan's complexity, the chosen `--optimism`
+level, and the required tier; ask them to switch (`/model`) and wait — don't grade a
+High-complexity feature at optimism 4-5 under a lower-tier model "just this once." If they
+explicitly choose to proceed anyway, note it in the report's header so `/execute-plan`'s correction
+loop and any later reviewer can see the report was produced below the required tier.
+
+No plan, or a plan with no `**Complexity:**` line (per §0's no-plan fallback)? There's no design
+score to match — apply only the shared table's flat Sonnet-5-at-optimism-4-5 floor.
 
 ## 1 — Optimism scale
 
@@ -253,6 +271,8 @@ For a cross-repo feature the report goes to `<container>/.claude/reports/TEST_RE
 - Quoting a coverage number without the command output that produced it.
 - Reporting "tests pass" when the build actually failed.
 - Skipping a mandatory vector because the optimism level is low. Scale intensity, never skip.
+- Grading a High-complexity plan at optimism 4-5 under a model below the required tier instead of
+  telling the user and asking them to switch.
 - Invoking `/code-review` or the `code-review` skill at all — it forks a subagent regardless of mode; do the correctness pass inline instead.
 - Applying the .NET checklist to a Flutter or Node repo — or to the wrong repo in a workspace.
 - A Correction Plan that `/execute-plan` cannot decompose, or one that omits the repo per item.

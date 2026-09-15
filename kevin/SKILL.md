@@ -30,7 +30,8 @@ Usage:
   `/kevin --e2e [--url <base-url>]` — whole project, every domain plus a cross-domain journey
 
 Artifact paths, `<Name>` derivation and repo resolution come from
-`~/.claude/skills/_shared/pipeline-contract.md`.
+`~/.claude/skills/_shared/pipeline-contract.md`. The model floor in §0b comes from
+`~/.claude/skills/_shared/complexity-scoring.md`.
 
 ## 0 — Gate
 
@@ -82,6 +83,25 @@ report format, replaced by §6 for `--e2e`.
 - `<Name>` for the report and announcement is the domain's own kebab-case name (already
   kebab-case per `map-codebase`'s domain-naming convention) unless a matched feature name gives a
   more specific one.
+
+## 0b — Model floor
+
+`--plan` mode: read the plan's `**Complexity:**` line (already extracted while **Locate the plan**
+ran above) and check it against the grading-level table in
+`~/.claude/skills/_shared/complexity-scoring.md` — the same feature-level score `plan-feature`
+computed at design time, reused here rather than scored again.
+
+`--domain` mode has no plan and therefore no complexity line — apply the table's flat Sonnet-5
+floor.
+
+`--e2e` mode always requires at least Sonnet 5, and Opus 5 is recommended once the map lists more
+than about five domains — §6.1's cost checkpoint already counts the domains, so check the floor
+there in the same breath as naming the cost.
+
+Check the required tier against the model actually powering this session. If it falls short, tell
+the user and ask them to switch (`/model`) before proceeding, and wait — don't run an `--e2e` pass
+or grade a High-complexity plan under a lower tier "just this once." If they explicitly choose to
+proceed anyway, note it in the report's header.
 
 ## 1 — Get the app running
 
@@ -285,8 +305,12 @@ applied per-flow below.
 - Read `.claude/maps/index.md` (container-level in a workspace) and count the domains and the
   flows listed under each.
 - State that count out loud, and that a full-persona pass (§2's mistake-then-correct pattern, per
-  step) across every one of them is a large, multi-domain spend — the same escalation checkpoint
-  `pipeline-contract.md`'s cost-discipline section requires before any multi-x jump.
+  step) **plus one `ui-ux-pro-max` expert critique per domain** (§3b/§6.2) across every one of them
+  is a large, multi-domain spend — the same escalation checkpoint `pipeline-contract.md`'s
+  cost-discipline section requires before any multi-x jump. Naming only the domain/flow count and
+  leaving out the per-domain critique understates what's actually being approved.
+- State the required model floor from §0b in the same breath — `--e2e` needs at least Sonnet 5,
+  Opus 5 recommended past ~5 domains.
 - **Ask before proceeding.** This runs every time, regardless of how few domains the map has —
   `--e2e` *is* the multi-x jump that checkpoint exists for, not a case that might be small enough
   to skip it.
@@ -393,6 +417,9 @@ needs updating.
   a plan's manifest, just from a different document.
 - Skipping the §6.1 cost checkpoint because the map only has a handful of domains — it runs every
   time, not past some threshold.
+- Naming only the domain/flow count in §6.1 and leaving out the per-domain `ui-ux-pro-max` critique
+  cost, or running `--e2e` (or grading a High-complexity plan) under a model below the §0b floor
+  instead of telling the user and asking them to switch.
 - Building a §6.3 cross-domain journey on an edge that turns out coincidental, without confirming
   it first.
 - Writing `ONBOARDING.md` from the Issues section or Correction Plan instead of each domain's

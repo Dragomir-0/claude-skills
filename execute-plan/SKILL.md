@@ -54,7 +54,7 @@ milestone.
 
 | Role | Model | Does |
 |---|---|---|
-| **Controller — you** | session model, typically Opus 5 | decompose, **all verification**, regression re-eval, adjudication; primary implementer for any task scored 8-10 |
+| **Controller — you** | session model, typically Opus 5 | decompose, **owns every verification** (adjudicates the result even when the mechanical diff-check for a large diff is delegated per §5), regression re-eval, adjudication; primary implementer for any task scored 8-10 |
 | **Subagent — mechanical** | `claude-haiku-4-5-20251001` | tasks scored 1-3; optional mechanical helpers alongside a 4-7 task |
 | **Subagent — judgment** | `claude-sonnet-5` | primary implementer for tasks scored 4-7; every escalation |
 
@@ -87,28 +87,32 @@ task landed where it did without re-deriving the call.
 
 ## 4 — Escalation ladder
 
-Governs the **primary implementer** for a task. Three subagent attempts, then you take over —
-except a task scored 8-10 in §3, where the controller is the primary implementer from the start,
-not a fallback reached after failed attempts.
+Governs the **primary implementer** for a task. Two subagent attempts, then you take over — except
+a task scored 8-10 in §3, where the controller is the primary implementer from the start, not a
+fallback reached after failed attempts.
 
 1. **Attempt 1** — the model §3's score assigned: `claude-haiku-4-5-20251001` for a 1-3, or
-   `claude-sonnet-5` for a 4-7. (An 8-10 task starts at step 4 — see above.)
-2. **Attempt 2** — `claude-sonnet-5`, with your findings from attempt 1. (A task that started at
-   Sonnet stays at Sonnet — there's no capped tier above it to escalate to.)
-3. **Attempt 3** — `claude-sonnet-5`, with accumulated findings from attempts 1–2.
-4. **Controller** — you implement the task yourself. Progress is never blocked by a capped model.
+   `claude-sonnet-5` for a 4-7. (An 8-10 task starts at step 3 — see above.)
+2. **Attempt 2** — `claude-sonnet-5`, with your findings from attempt 1. A task that started at
+   Haiku escalates a tier; a task that started at Sonnet gets one retry with findings — there's no
+   capped tier above it to escalate to, and a third identical-tier attempt would buy no new
+   capability over the second, only more tokens spent hoping for a different outcome.
+3. **Controller** — you implement the task yourself. Progress is never blocked by a capped model.
 
 This ladder runs alongside, not instead of, the supporting subagent scaling in §3 — a 4-7 task's
 optional Haiku helpers, or an 8-10 task's normal fan-out for its separable mechanical portions, are
 dispatched and verified independently of where the primary implementer sits on this ladder.
 
-The original brief called for escalating to Opus on strike 3. That is deliberately replaced by
-"the controller does it" — the same capability, without handing an unsupervised subagent the
-expensive model.
+The original brief called for escalating to Opus after a third failed attempt. That is
+deliberately replaced by "the controller does it," reached one round sooner — the same capability,
+without handing an unsupervised subagent the expensive model or paying for a third attempt at a
+tier that already failed twice.
 
 ## 5 — Verification
 
-**A capped subagent never grades its own work.** After every task, verify the diff against:
+**A capped subagent never grades its own work** — a verifier is always a different subagent than
+the one that implemented the task, never the same instance. After every task, verify the diff
+against:
 
 1. the atomic task brief, and
 2. the plan's global constraints and test cases.
@@ -117,6 +121,11 @@ Check adherence to the architecture map, syntax correctness, logical errors, and
 the atomic task goal — and, for a UI diff, adherence to the plan's Design Direction (style,
 palette, typography, component patterns). Large diff → dispatch a dedicated `claude-sonnet-5`
 verifier subagent to keep your context clean. Small diff → verify inline.
+
+**Delegating the mechanical diff-check doesn't delegate the decision.** Read the verifier's report
+and adjudicate pass/fail yourself before moving on — that adjudication is what §2 means by the
+controller "owning" verification. A verifier subagent may do the reading; only you decide what it
+means.
 
 If errors are found, return a **strict list of corrections** to feed into the next attempt.
 
@@ -303,7 +312,7 @@ resume from rather than restarting the loop at round 1.
 |---|---|
 | Dispatch a subagent without an explicit model | It inherits Opus. Set the model, every time. |
 | Let a subagent own the primary implementation of a task scored 8-10 | No capped tier can own it — the controller leads it directly, subagents only help with separable pieces. |
-| Let a subagent verify its own work | Verification is the controller's job. Always. |
+| Let a subagent verify its own work, or skip reading a verifier's report before deciding | The controller adjudicates every verification. A large diff may go to a dedicated Sonnet verifier (§5), but never the same subagent that implemented it, and never without you reading its report and deciding pass/fail yourself. |
 | Exceed Sonnet to break a stuck loop | Forbidden. At the cap you take over yourself. |
 | Silently pass the 350k ceiling | Hard-stop and ask. The ceiling is the point. |
 | Declare "done" without running the plan's verification | Run it. Evidence first. |

@@ -117,3 +117,24 @@ accordingly:
 
 Record the score on the task's ledger line (`score=<n>`) so a resumed run and any later review can
 see why a task was dispatched where it was, without re-deriving the judgment call.
+
+## Grading-level use (test-feature, kevin)
+
+Neither skill computes its own complexity score — both reuse the **feature-level** score
+`plan-feature` already wrote into the plan's `**Complexity:**` header line, so grading rigor tracks
+design rigor without a second scoring pass.
+
+| Plan complexity | Mode | Required session model |
+|---|---|---|
+| any | test-feature optimism 1-3; kevin `--plan`/`--domain` | Sonnet 5 |
+| 8-10 | test-feature optimism 4-5 | Opus 5 |
+| 4-7 (or no plan / no `**Complexity:**` line) | test-feature optimism 4-5 | Sonnet 5 |
+| any | kevin `--e2e` | Sonnet 5 minimum; Opus 5 recommended past ~5 domains |
+
+Same protocol as the feature-level gate: check the session's actual model against the required
+tier before doing the substantive grading; if it falls short, tell the user and ask them to switch
+(`/model`), waiting rather than proceeding by default. If they explicitly choose to proceed anyway,
+note it in the report header, the same way `plan-feature` notes a below-tier design.
+
+Neither skill dispatches subagents at any tier — this gate is purely about the interactive
+session's own model, identical in spirit to the feature-level gate above.
