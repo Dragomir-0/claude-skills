@@ -1,9 +1,12 @@
-# Claude Code skills — the feature pipeline
+# Claude Code skills & infrastructure
 
-My personal Claude Code skills: a six-skill pipeline that takes a feature from "I have an idea"
-to "it's on a branch, reviewed and pushed" — with a UAT persona that can run standalone at any
-point. Each stage is a slash command, writes exactly one kind of artifact, and hard-pauses for
-me at the decisions that are mine to make.
+My personal Claude Code setup: a feature pipeline of slash-command skills plus background infrastructure hooks. Everything lives here, versions with git, and syncs across machines.
+
+## What's included
+
+### Skills (slash commands)
+
+A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a branch, reviewed and pushed" — with a UAT persona that can run standalone at any point. Each stage is a slash command, writes exactly one kind of artifact, and hard-pauses for decisions that are yours to make.
 
 ```
 /map-codebase  →  /plan-feature  →  /execute-plan  →  /test-feature  →  /document-changes  →  /cleanup-crew
@@ -22,6 +25,14 @@ me at the decisions that are mine to make.
 | **`/cleanup-crew`** | Stashes, branches off an up-to-date base, restores the work, refreshes docs, and drives a reviewed conventional commit and push ready for a PR. | a branch + commit |
 | **`/document-changes`** | Analyzes git diffs to generate comprehensive change documentation with ticket context, architecture impact, and design decisions. Maps files to layers, documents the "why" behind changes, and produces structured markdown explaining what changed and how it affects the codebase. | change docs |
 
+### Hooks (background infrastructure)
+
+Optional background systems that run automatically, not on command:
+
+| Hook | What it does |
+|---|---|
+| **`context-threshold-hook`** | Monitors transcript size and automatically enforces context clearing when ~150k tokens are reached. Writes a handoff document before clearing, then resumes from it on the next session. Prevents context-window exhaustion in long-running sessions. |
+
 `_shared/pipeline-contract.md` holds the artifact paths, repo resolution, `<Name>` derivation, cost
 discipline and the dispatch-surface rules that these skills read, and
 `_shared/complexity-scoring.md` holds the **model reference** (IDs, context windows, prices — the
@@ -35,15 +46,15 @@ design rigor. **Neither shared file is optional** — the skills reference them 
 
 ## Install on a new machine
 
-Skills are plain files; nothing syncs through the Claude account. Clone this repo *as* the
-skills directory:
+Skills and hooks are plain files; nothing syncs through the Claude account.
+
+### Step 1: Clone the skills directory
 
 ```bash
 git clone https://github.com/Steelwool9925/claude-skills.git ~/.claude/skills
 ```
 
-If `~/.claude/skills` already exists and has skills in it you want to keep, clone elsewhere and
-copy instead:
+If `~/.claude/skills` already exists and has content you want to keep, clone elsewhere and copy instead:
 
 ```bash
 git clone https://github.com/Steelwool9925/claude-skills.git /tmp/claude-skills
@@ -54,8 +65,7 @@ cp /tmp/claude-skills/_shared/{pipeline-contract.md,complexity-scoring.md} ~/.cl
 
 On Windows the path is the same: `C:\Users\<you>\.claude\skills\`.
 
-Restart Claude Code (or `/exit` and relaunch). Confirm with `/help` — the seven commands should
-be listed. The end state you want:
+The end state you want (skills only):
 
 ```
 ~/.claude/skills/
@@ -65,10 +75,26 @@ be listed. The end state you want:
 ├── document-changes/SKILL.md
 ├── execute-plan/SKILL.md
 ├── kevin/SKILL.md
-├── map-codebase/         SKILL.md + map.mjs + 3 test scripts
+├── map-codebase/         SKILL.md + map.mjs + test scripts
 ├── plan-feature/SKILL.md
 └── test-feature/SKILL.md
 ```
+
+### Step 2: Install hooks (optional)
+
+If you want the background context-threshold hook:
+
+```bash
+# Copy hook files
+cp ~/.claude/skills/context-threshold-hook/*.js ~/.claude/hooks/
+
+# Merge settings-snippet.json into ~/.claude/settings.json
+# (or follow the manual steps in context-threshold-hook/SKILL.md)
+```
+
+### Step 3: Restart Claude Code
+
+Restart Claude Code (or `/exit` and relaunch). Confirm with `/help` — the seven skill commands should be listed.
 
 ---
 
@@ -138,12 +164,27 @@ Skills are re-read at session start, so a `git pull` takes effect on the next Cl
 
 ---
 
-## What is deliberately *not* here
+## Architecture: Skills, Hooks, and Settings
 
-- **Plugin skills** (`superpowers`, `skill-creator`, `frontend-design`, `dataviz`, …) — these
-  live in `~/.claude/plugins/cache/` and are reinstalled from the marketplace, not copied. Their
-  install records store absolute paths that would be wrong on another machine.
-- **`~/.claude/CLAUDE.md`** — global instructions (file-access rules, response format). Separate
-  concern, worth copying by hand.
-- **`~/.claude/settings.json`** — permissions and hooks. Copy with care: hook entries often
-  reference absolute paths that will not exist on the new machine.
+**Skills** (this repo): User-invoked slash commands. Invoke them, they run once. These live in
+`~/.claude/skills/` and are entirely portable — copy anywhere, version in git, sync across
+machines.
+
+**Hooks** (this repo): Background infrastructure. Run automatically on events (session start,
+prompt submit, etc.). These live in `~/.claude/hooks/` and are portable files. Configuration
+(`settings.json` entries) may reference absolute paths and needs per-machine setup.
+
+**Settings & Plugins** (NOT in this repo): Permissions, hook configuration, and installed plugins
+live in `~/.claude/settings.json` and `~/.claude/plugins/cache/`. These are machine-specific and
+not portable:
+- **Plugin skills** (`superpowers`, `skill-creator`, `frontend-design`, `dataviz`, …) are
+  reinstalled from the marketplace, not copied. Their install records store absolute paths.
+- **`~/.claude/settings.json`** contains permissions, hook configuration, and user preferences.
+  Copy with care: hook commands often reference absolute paths that will not exist on another
+  machine.
+- **`~/.claude/CLAUDE.md`** holds global instructions (file-access rules, response format). Separate
+  concern, worth copying by hand if you have one.
+
+**Rule of thumb**: Everything in this repo (skills + hook files) can be cloned and synced. The
+`settings-snippet.json` files in each hook directory show what *configuration* to add to your
+local `settings.json` — the commands will differ on each machine based on your home directory.
