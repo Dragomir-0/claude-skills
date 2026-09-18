@@ -6,9 +6,9 @@ point. Each stage is a slash command, writes exactly one kind of artifact, and h
 me at the decisions that are mine to make.
 
 ```
-/map-codebase  →  /plan-feature  →  /execute-plan  →  /test-feature  →  /cleanup-crew
-   architecture      the plan         the code          the grade     ↘     the branch
-                                                                        /kevin
+/map-codebase  →  /plan-feature  →  /execute-plan  →  /test-feature  →  /document-changes  →  /cleanup-crew
+   architecture      the plan         the code          the grade            the docs          the branch
+                                                                        ↘     /kevin
                                                                         UAT, live frontend
 ```
 
@@ -20,6 +20,7 @@ me at the decisions that are mine to make.
 | **`/test-feature`** | Grades the implemented feature against its plan at a chosen rigour (`--optimism 1-5`), measuring real coverage at level 3+, and checking completeness, security, deployment, pipeline and efficiency. Never spawns subagents — the whole run stays in one evidence trail. Never touches source. | a test report |
 | **`/kevin`** | Plays a careless first-time user through the live frontend — a feature, a whole map domain, or the entire project — deliberately mistyping and misclicking, and reports every bug, crash and confusing moment. Reads the plan/map, never source. | a bug report (+ onboarding doc) |
 | **`/cleanup-crew`** | Stashes, branches off an up-to-date base, restores the work, refreshes docs, and drives a reviewed conventional commit and push ready for a PR. | a branch + commit |
+| **`/document-changes`** | Analyzes git diffs to generate comprehensive change documentation with ticket context, architecture impact, and design decisions. Maps files to layers, documents the "why" behind changes, and produces structured markdown explaining what changed and how it affects the codebase. | change docs |
 
 `_shared/pipeline-contract.md` holds the artifact paths, repo resolution, `<Name>` derivation, cost
 discipline and the dispatch-surface rules that these skills read, and
@@ -46,14 +47,14 @@ copy instead:
 
 ```bash
 git clone https://github.com/Steelwool9925/claude-skills.git /tmp/claude-skills
-cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin} ~/.claude/skills/
+cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin,document-changes} ~/.claude/skills/
 mkdir -p ~/.claude/skills/_shared
 cp /tmp/claude-skills/_shared/{pipeline-contract.md,complexity-scoring.md} ~/.claude/skills/_shared/
 ```
 
 On Windows the path is the same: `C:\Users\<you>\.claude\skills\`.
 
-Restart Claude Code (or `/exit` and relaunch). Confirm with `/help` — the six commands should
+Restart Claude Code (or `/exit` and relaunch). Confirm with `/help` — the seven commands should
 be listed. The end state you want:
 
 ```
@@ -61,6 +62,7 @@ be listed. The end state you want:
 ├── _shared/pipeline-contract.md
 ├── _shared/complexity-scoring.md
 ├── cleanup-crew/SKILL.md
+├── document-changes/SKILL.md
 ├── execute-plan/SKILL.md
 ├── kevin/SKILL.md
 ├── map-codebase/         SKILL.md + map.mjs + 3 test scripts
