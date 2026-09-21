@@ -1,0 +1,8 @@
+{
+  "name": "claude-skills-tooling",
+  "private": true,
+  "type": "module",
+  "description": "Codeable, non-judgment steps of the Claude Code pipeline skills, extracted into plain Node modules.",
+  "engines": { "node": ">=14.8" },
+  "scripts": { "test": "node run-tests.mjs" }
+}
