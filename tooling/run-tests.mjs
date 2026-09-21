@@ -3,5 +3,6 @@
 import { run } from '../map-codebase/harness.mjs'
 import './lib/complexity-scoring.test.mjs'
 import './lib/drift-guard.test.mjs'
+import './lib/git-orchestration.test.mjs'
 
 process.exit(await run())

@@ -8,7 +8,7 @@ first plan and its full context.
 | Name | Title | Status | Plan |
 |---|---|---|---|
 | complexity-scoring-config | Complexity-scoring config + lookup module | Done | `.claude/plans/FEATURE_PLAN_complexity-scoring-config.md` |
-| git-orchestration | Git orchestration module (stash/branch/pull/conflict-detect) | Active | `.claude/plans/FEATURE_PLAN_git-orchestration.md` |
+| git-orchestration | Git orchestration module (stash/branch/pull/conflict-detect) | Done | `.claude/plans/FEATURE_PLAN_git-orchestration.md` |
 | commit-composer | Commit composer + guarded push module | Active | `.claude/plans/FEATURE_PLAN_commit-composer.md` |
 | changelog-helper | changes.md gitignore + append-only entry helper | Active | `.claude/plans/FEATURE_PLAN_changelog-helper.md` |
 | plan-pruning | Finished-plan ledger pruning scanner | Active | `.claude/plans/FEATURE_PLAN_plan-pruning.md` |
