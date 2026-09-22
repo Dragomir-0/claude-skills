@@ -48,20 +48,28 @@ working tree if nothing is staged.
 
 ## 0b — Model floor
 
-Read the plan's `**Complexity:**` line (from the plan §0 located, if one was found) and check it
-against the grading-level table in `~/.claude/skills/_shared/complexity-scoring.md`. This reuses
-`plan-feature`'s feature-level score rather than computing a new one — grading rigor should track
-design rigor, and the score is already sitting in the plan header for free.
+Read the plan's `**Complexity:**` line (from the plan §0 located, if one was found) — reuses
+`plan-feature`'s feature-level score rather than computing a new one, so grading rigor tracks
+design rigor. Look the required tier up deterministically rather than re-reading the table by eye:
 
-Check the required tier against the model actually powering this session. If the session already
-meets or exceeds it, continue. If not, tell the user the plan's complexity, the chosen `--optimism`
-level, and the required tier; ask them to switch (`/model`) and wait — don't grade a
-High-complexity feature at optimism 4-5 under a lower-tier model "just this once." If they
-explicitly choose to proceed anyway, note it in the report's header so `/execute-plan`'s correction
-loop and any later reviewer can see the report was produced below the required tier.
+```bash
+# --optimism 1-3, any plan complexity
+node ~/.claude/skills/tooling/cli.mjs complexity-scoring.modelForGate '["gradingLevel", null, {"mode":"test-feature-low-optimism"}]'
+# --optimism 4-5, with the plan's Complexity score
+node ~/.claude/skills/tooling/cli.mjs complexity-scoring.modelForGate '["gradingLevel", <score>, {"mode":"test-feature-high-optimism"}]'
+```
+
+Returns `{"model": "sonnet5" | "opus5", "note": "..."}`. Check the required tier against the model
+actually powering this session. If the session already meets or exceeds it, continue. If not, tell
+the user the plan's complexity, the chosen `--optimism` level, and the required tier; ask them to
+switch (`/model`) and wait — don't grade a High-complexity feature at optimism 4-5 under a
+lower-tier model "just this once." If they explicitly choose to proceed anyway, note it in the
+report's header so `/execute-plan`'s correction loop and any later reviewer can see the report was
+produced below the required tier.
 
 No plan, or a plan with no `**Complexity:**` line (per §0's no-plan fallback)? There's no design
-score to match — apply only the shared table's flat Sonnet-5-at-optimism-4-5 floor.
+score to match — call the `test-feature-low-optimism` lookup regardless of the chosen `--optimism`
+level; it's a flat Sonnet 5 floor either way.
 
 ## 1 — Optimism scale
 

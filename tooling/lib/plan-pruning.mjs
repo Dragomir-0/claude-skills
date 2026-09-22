@@ -19,26 +19,26 @@ export function parseLedgerApprovals (ledgerText) {
 }
 
 /**
- * Reads the plan's `**Chosen tier:**` line to find which tier was actually approved, then
- * extracts the milestone numbers listed under that tier's own `### Milestones` subsection only —
- * scoped between that tier's `## Tier <N>` heading and the next `## ` heading, not the whole
- * file (every plan carries milestones under both Tier 1 and Tier 2 with the same `**M1 —**`
- * numbering, and only the chosen tier's milestones are the ones execute-plan actually runs).
+ * Reads the `(chosen)` marker `plan-feature` appends to the chosen tier's own `## Tier <N>`
+ * heading to find which tier was actually approved, then extracts the milestone numbers listed
+ * under that tier's own `### Milestones` subsection only — scoped between that heading and the
+ * next `## ` heading, not the whole file (every plan carries milestones under both Tier 1 and
+ * Tier 2 with the same `**M1 —**` numbering, and only the chosen tier's milestones are the ones
+ * execute-plan actually runs). Real plans mark the choice this way, not with a separate
+ * `**Chosen tier:**` line — this must stay in sync with `plan-feature`'s "Approval and write"
+ * section, the only other place that convention is written down. `(selected)` is also accepted —
+ * one early plan in this repo used that wording before `(chosen)` was standardized.
  *
  * Returns `{ tier, milestones }` on success, or `{ error: 'no-chosen-tier' | 'malformed-plan' }`
- * when the chosen tier can't be identified or its Milestones section can't be located — never
+ * when no tier heading carries the marker or its Milestones section can't be located — never
  * throws and never silently guesses a tier.
  */
 export function parseChosenTierMilestones (planText) {
-  const chosenMatch = planText.match(/\*\*Chosen tier:\*\*\s*Tier\s*(\d+)/i)
-  if (!chosenMatch) return { error: 'no-chosen-tier' }
-  const tierNum = Number(chosenMatch[1])
+  const chosenHeadingMatch = planText.match(/^## Tier (\d+)\b.*\((?:chosen|selected)\).*$/m)
+  if (!chosenHeadingMatch) return { error: 'no-chosen-tier' }
+  const tierNum = Number(chosenHeadingMatch[1])
 
-  const tierHeadingRe = new RegExp(`^## Tier ${tierNum}\\b.*$`, 'm')
-  const headingMatch = planText.match(tierHeadingRe)
-  if (!headingMatch) return { error: 'malformed-plan' }
-
-  const afterHeading = planText.slice(headingMatch.index + headingMatch[0].length)
+  const afterHeading = planText.slice(chosenHeadingMatch.index + chosenHeadingMatch[0].length)
   const nextHeadingMatch = afterHeading.match(/^## /m)
   const tierSection = nextHeadingMatch ? afterHeading.slice(0, nextHeadingMatch.index) : afterHeading
 

@@ -47,9 +47,13 @@ copy instead:
 ```bash
 git clone https://github.com/Steelwool9925/claude-skills.git /tmp/claude-skills
 cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin} ~/.claude/skills/
+cp -r /tmp/claude-skills/tooling ~/.claude/skills/
 mkdir -p ~/.claude/skills/_shared
 cp /tmp/claude-skills/_shared/{pipeline-contract.md,complexity-scoring.md} ~/.claude/skills/_shared/
 ```
+
+`tooling/` isn't optional: every skill's model-gate lookups, and every step of `cleanup-crew`,
+shell out to `node ~/.claude/skills/tooling/cli.mjs` at that fixed path — see `tooling/README.md`.
 
 On Windows the path is the same: `C:\Users\<you>\.claude\skills\`.
 
@@ -65,7 +69,8 @@ be listed. The end state you want:
 ├── kevin/SKILL.md
 ├── map-codebase/         SKILL.md + map.mjs + 3 test scripts
 ├── plan-feature/SKILL.md
-└── test-feature/SKILL.md
+├── test-feature/SKILL.md
+└── tooling/              cli.mjs + lib/ + config/ — see tooling/README.md
 ```
 
 ---

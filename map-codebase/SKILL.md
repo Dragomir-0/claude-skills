@@ -36,11 +36,18 @@ cost discipline live in `~/.claude/skills/_shared/pipeline-contract.md`. Read it
 
 ## 0 — Model floor
 
-Check the required tier for the invoked mode (full build, `--update`, or `--verify`) against
-`~/.claude/skills/_shared/complexity-scoring.md`'s Map-level table, then against the model actually
-powering this session. If it falls short, tell the user and ask them to switch (`/model`) before
-proceeding, and wait — don't run a build or update under a lower tier "just this once." If they
-explicitly choose to proceed anyway, note it in `index.md`'s header.
+Look the required tier up deterministically for the invoked mode:
+
+```bash
+node ~/.claude/skills/tooling/cli.mjs complexity-scoring.modelForGate '["mapLevel", null, {"mode":"fullBuildOrUpdate"}]'  # full build or --update
+node ~/.claude/skills/tooling/cli.mjs complexity-scoring.modelForGate '["mapLevel", null, {"mode":"verify"}]'             # --verify
+```
+
+`fullBuildOrUpdate` returns `{"model":"sonnet5"}`; `verify` returns `{"model":null, "note":"..."}` —
+a `null` model means no floor applies (a zero-token deterministic script check). Check the required
+tier against the model actually powering this session. If it falls short, tell the user and ask
+them to switch (`/model`) before proceeding, and wait — don't run a build or update under a lower
+tier "just this once." If they explicitly choose to proceed anyway, note it in `index.md`'s header.
 
 ## Preflight
 

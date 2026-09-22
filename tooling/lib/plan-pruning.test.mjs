@@ -14,19 +14,21 @@ function tempDir () {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'plan-pruning-'))
 }
 
-// A fixture plan mirroring this initiative's own real plan shape: both tiers present, a
-// `**Chosen tier:**` line, and a `### Milestones` subsection under each `## Tier N` heading,
-// with the same M1/M2 numbering repeated in both tiers.
-function fixturePlan ({ chosenTier = 2 } = {}) {
+// A fixture plan mirroring this initiative's own real plan shape (see e.g.
+// .claude/plans/FEATURE_PLAN_git-orchestration.md): both tiers present, the chosen one marked by
+// appending `(chosen)` to its own `## Tier N` heading — no separate "Chosen tier" line exists in a
+// real plan — and a `### Milestones` subsection under each `## Tier N` heading, with the same
+// M1/M2 numbering repeated in both tiers. `marker` lets one test exercise the `(selected)`
+// wording that one early plan in this repo used before `(chosen)` was standardized.
+function fixturePlan ({ chosenTier = 2, marker = 'chosen' } = {}) {
+  const tierLabel = n => `## Tier ${n} — ${n === 1 ? 'Status Quo' : 'Localized Optimization'}${n === chosenTier ? ` (${marker})` : ''}`
   return `# FEATURE_PLAN_fixture
-
-**Chosen tier:** Tier ${chosenTier} — Localized Optimization.
 
 ## Context
 
 Some context text.
 
-## Tier 1 — Status Quo
+${tierLabel(1)}
 
 ### File Impact Manifest
 
@@ -41,7 +43,7 @@ Some context text.
 **M2 — Second thing (Tier 1)**
 - Some criteria.
 
-## Tier 2 — Localized Optimization (chosen)
+${tierLabel(2)}
 
 ### File Impact Manifest
 
@@ -105,16 +107,15 @@ test('parseChosenTierMilestones extracts Tier 1\'s milestones when Tier 1 is cho
   assert.deepEqual(result, { tier: 1, milestones: [1, 2] })
 })
 
-test('parseChosenTierMilestones reports no-chosen-tier when the Chosen tier line is missing', () => {
-  const planText = fixturePlan({ chosenTier: 2 }).replace(/\*\*Chosen tier:\*\*.*\n/, '')
+test('parseChosenTierMilestones reports no-chosen-tier when no heading carries the (chosen) marker', () => {
+  const planText = fixturePlan({ chosenTier: 2 }).replace(' (chosen)', '')
   const result = parseChosenTierMilestones(planText)
   assert.deepEqual(result, { error: 'no-chosen-tier' })
 })
 
-test('parseChosenTierMilestones reports malformed-plan when the chosen tier heading is missing', () => {
-  const planText = fixturePlan({ chosenTier: 2 }).replace('## Tier 2 — Localized Optimization (chosen)', '## Something Else')
-  const result = parseChosenTierMilestones(planText)
-  assert.deepEqual(result, { error: 'malformed-plan' })
+test('parseChosenTierMilestones also accepts the (selected) wording for backward compat', () => {
+  const result = parseChosenTierMilestones(fixturePlan({ chosenTier: 2, marker: 'selected' }))
+  assert.deepEqual(result, { tier: 2, milestones: [1, 2, 3] })
 })
 
 test('parseChosenTierMilestones reports malformed-plan when the Milestones subsection is missing', () => {
@@ -162,13 +163,16 @@ test('isSafeToDelete returns pending-approval with the sorted list of unapproved
 })
 
 test('isSafeToDelete passes through no-chosen-tier from parseChosenTierMilestones', () => {
-  const planText = fixturePlan({ chosenTier: 2 }).replace(/\*\*Chosen tier:\*\*.*\n/, '')
+  const planText = fixturePlan({ chosenTier: 2 }).replace(' (chosen)', '')
   const result = isSafeToDelete({ planText, ledgerText: 'APPROVED | milestone=1 | by=user' })
   assert.deepEqual(result, { safe: false, reason: 'no-chosen-tier' })
 })
 
 test('isSafeToDelete passes through malformed-plan from parseChosenTierMilestones', () => {
-  const planText = fixturePlan({ chosenTier: 2 }).replace('## Tier 2 — Localized Optimization (chosen)', '## Something Else')
+  const planText = fixturePlan({ chosenTier: 2 }).replace(
+    /### Milestones\n\n\*\*M1 — First thing \(Tier 2\)\*\*[\s\S]*?(?=## Tier 3)/,
+    ''
+  )
   const result = isSafeToDelete({ planText, ledgerText: 'APPROVED | milestone=1 | by=user' })
   assert.deepEqual(result, { safe: false, reason: 'malformed-plan' })
 })

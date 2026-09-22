@@ -86,18 +86,24 @@ report format, replaced by §6 for `--e2e`.
 
 ## 0b — Model floor
 
-`--plan` mode: read the plan's `**Complexity:**` line (already extracted while **Locate the plan**
-ran above) and check it against the grading-level table in
-`~/.claude/skills/_shared/complexity-scoring.md` — the same feature-level score `plan-feature`
-computed at design time, reused here rather than scored again.
+Look the required tier up deterministically rather than re-reading the table by eye:
 
-`--domain` mode has no plan and therefore no complexity line — apply the table's flat Sonnet-5
-floor.
+```bash
+# --plan or --domain mode — flat floor regardless of the plan's Complexity score
+node ~/.claude/skills/tooling/cli.mjs complexity-scoring.modelForGate '["gradingLevel", null, {"mode":"kevin-plan-or-domain"}]'
+# --e2e mode — pass the domain count §6.1's cost checkpoint already computed
+node ~/.claude/skills/tooling/cli.mjs complexity-scoring.modelForGate '["gradingLevel", null, {"mode":"kevin-e2e", "domainCount":<n>}]'
+```
 
-`--e2e` mode always requires at least Sonnet 5, and Opus 5 is required once the map lists more than
-about five domains — §6.1's cost checkpoint already counts the domains, so check the floor there in
-the same breath as naming the cost. This is a hard gate, same as every other row in this table: no
-silently running an `--e2e` pass over five domains on Sonnet because the count "felt close enough."
+`--plan` mode: the plan's `**Complexity:**` line (already extracted while **Locate the plan** ran
+above) doesn't change this gate — `kevin-plan-or-domain` is a flat Sonnet 5 floor regardless of
+score, the same floor `--domain` mode gets, which has no plan and therefore no complexity line at
+all.
+
+`--e2e` mode returns Sonnet 5 at or below ~5 domains and Opus 5 above it — §6.1's cost checkpoint
+already counts the domains, so check the floor there in the same breath as naming the cost. This is
+a hard gate, same as every other row in this table: no silently running an `--e2e` pass over five
+domains on Sonnet because the count "felt close enough."
 
 Check the required tier against the model actually powering this session. If it falls short, tell
 the user and ask them to switch (`/model`) before proceeding, and wait — don't run an `--e2e` pass

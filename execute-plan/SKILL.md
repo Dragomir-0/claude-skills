@@ -80,7 +80,14 @@ consistent without re-deriving style choices per task.
 
 Score each task against its own brief using the task-level rubric in
 `~/.claude/skills/_shared/complexity-scoring.md`. There is no tier to dispatch to — you implement
-every task yourself, regardless of score — but the score still does two things:
+every task yourself, regardless of score. Look up what the score means deterministically:
+
+```bash
+node ~/.claude/skills/tooling/cli.mjs complexity-scoring.modelForGate '["taskLevel", <score>]'
+```
+
+Returns `{"guidance": "<text>"}` — never a model, since nothing is ever dispatched. The score still
+does two things:
 
 - **Sets verification rigor** (§3): a higher score gets a slower, more skeptical read of its own
   diff before you move on, the same way a large diff always does regardless of score.
@@ -134,6 +141,18 @@ file. Append one line per task, after it is implemented and verified:
 ```
 STAT | task=<N> | score=<1-10> | repo=<name> | round=<k> | status=<DONE|DONE_WITH_CONCERNS|BLOCKED|NEEDS_CONTEXT|PASS|FAIL> | tokens=<n>
 ```
+
+On a milestone's hard-stop approval (§6), append one more line:
+
+```
+APPROVED | milestone=<N> | by=user
+```
+
+This is the only record that a milestone actually cleared its hard stop — `/cleanup-crew`'s step 8
+(`plan-pruning`) reads it back to decide whether a finished plan is safe to delete, comparing it
+against the chosen tier's milestone numbers in the plan itself. A milestone with no `APPROVED` line
+reads as still pending, forever, even after the plan's row is marked `Done` in the roadmap — write
+it in the same breath as printing the hard-stop message, not as an afterthought.
 
 `score=` is the task's complexity-scoring result from §2 — keep it even after a later round fixes
 the task, so a resumed run can see how much scrutiny it got without re-deriving the call.
@@ -213,7 +232,8 @@ Execute tasks sequentially until the milestone is complete, then **hard stop** a
 > Milestone [X] complete. Please run your tests and verify the functionality. Type 'Approve' to
 > begin the next milestone, or provide feedback for corrections.
 
-Wait for explicit input. Do not decompose the next milestone until approved.
+Wait for explicit input. Do not decompose the next milestone until approved. On approval, append
+the milestone's `APPROVED | milestone=<N> | by=user` line to the ledger (§5) before moving on.
 
 ## 7 — Finish
 
