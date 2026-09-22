@@ -12,5 +12,5 @@ first plan and its full context.
 | commit-composer | Commit composer + guarded push module | Done | `.claude/plans/FEATURE_PLAN_commit-composer.md` |
 | changelog-helper | changes.md gitignore + append-only entry helper | Done | `.claude/plans/FEATURE_PLAN_changelog-helper.md` |
 | plan-pruning | Finished-plan ledger pruning scanner | Done | `.claude/plans/FEATURE_PLAN_plan-pruning.md` |
-| cross-repo-table | Cross-repo summary table formatter | Active | `.claude/plans/FEATURE_PLAN_cross-repo-table.md` |
+| cross-repo-table | Cross-repo summary table formatter | Done | `.claude/plans/FEATURE_PLAN_cross-repo-table.md` |
 | subagent-strip-out | Finish stripping subagent dispatch from skills + gate CLAUDE.md's ban | Active | `.claude/plans/FEATURE_PLAN_subagent-strip-out.md` |
