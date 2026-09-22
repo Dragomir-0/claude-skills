@@ -203,6 +203,27 @@ gitignored per the pipeline contract and never reach the commit either way, so r
 pure workspace tidying, not something that changes what was just pushed. Runs automatically, no
 hard pause — but state plainly which plans (if any) were removed, and which were left and why.
 
+## 9 — Remove the consumed handoff document
+
+Once the branch is committed and pushed, any handoff document written for this session's working
+directory describes state that no longer exists — the work it was meant to hand off is now landed.
+
+Locate it in `~/.claude/handoff/`: sanitize the absolute working directory path by replacing every
+`:` and `\` with `-` (e.g. `C:\Users\Jason_Weiss\Projects\claude-skills` becomes
+`C--Users-Jason-Weiss-Projects-claude-skills`), then look for `<sanitized>.md` and its sibling
+`<sanitized>.requested` in that directory.
+
+- **Either file exists** → delete whichever are present. The work they described is committed and
+  pushed; there is nothing left to hand off.
+- **Neither exists** → nothing to do, say so.
+
+**Never touch another workspace's handoff files.** Match only the sanitized path for *this*
+session's own working directory — every other `*.md`/`*.requested` pair in `~/.claude/handoff/`
+belongs to a different project's in-progress or unread recovery state, and deleting one destroys
+context that cannot be reconstructed.
+
+Runs automatically, no hard pause — but state plainly whether a handoff document was removed.
+
 ## Guardrails
 
 - **Never force-push.**
@@ -227,6 +248,8 @@ hard pause — but state plainly which plans (if any) were removed, and which we
 - Skipping the drift preflight because "it's probably fine". It is free.
 - Deleting a plan whose ledger isn't fully approved, or one with no ledger at all — step 8 removes
   only genuinely finished plans, never mid-flight or unstarted ones.
+- Deleting a handoff document belonging to a different workspace than the one just committed —
+  step 9 matches only this session's own sanitized working-directory path.
 
 ## End of the pipeline
 

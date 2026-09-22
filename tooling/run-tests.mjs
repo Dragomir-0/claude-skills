@@ -6,5 +6,6 @@ import './lib/drift-guard.test.mjs'
 import './lib/git-orchestration.test.mjs'
 import './lib/commit-composer.test.mjs'
 import './lib/changelog.test.mjs'
+import './lib/plan-pruning.test.mjs'
 
 process.exit(await run())
