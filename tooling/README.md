@@ -14,13 +14,16 @@ codeable-section plans can do model-tier lookups programmatically instead of re-
 
 Exports:
 - `loadConfig()` — the parsed JSON config.
-- `modelInfo(tier)` — model ID, context window, and prices for `'opus5' | 'sonnet5' | 'haiku45'`.
+- `modelInfo(tier)` — model ID for `'opus5' | 'sonnet5'`.
 - `scoreBand(score)` — `'Low' | 'Medium' | 'High'` for a 1-10 overall score.
 - `computeScore(factors)` — `{ scope, ambiguity, risk, uncertainty }` (each 1-10) averaged and
   rounded, ties rounding up.
-- `modelForGate(gateName, score, opts)` — dispatch lookup across all four gate tables:
+- `modelForGate(gateName, score, opts)` — lookup across all four gate tables. `featureLevel`,
+  `gradingLevel` and `mapLevel` gate the interactive session's own model and return `{ model,
+  note? }`; `taskLevel` never gated a model (nothing is ever dispatched) and returns `{ guidance }`
+  instead — how much verification rigor the task score calls for.
   - `modelForGate('featureLevel', score)`
-  - `modelForGate('taskLevel', score)`
+  - `modelForGate('taskLevel', score)` — `{ guidance }`, not `{ model }`
   - `modelForGate('gradingLevel', score, { mode })` — `mode` one of
     `'test-feature-low-optimism' | 'kevin-plan-or-domain' | 'test-feature-high-optimism'
     | 'kevin-e2e'`; `'test-feature-high-optimism'` also needs `score` (plan complexity),
@@ -28,18 +31,11 @@ Exports:
   - `modelForGate('mapLevel', score, { mode })` — `mode` one of
     `'fullBuildOrUpdate' | 'verify'`; `score` is ignored for this gate.
 
-**Caveat on `.note` fields:** the `note` strings returned by `modelForGate` (most notably on
-`taskLevel`'s bands) are verbatim transcriptions of `_shared/complexity-scoring.md`'s current
-task-level table, which still describes subagent dispatch — language superseded by this repo's
-active no-subagent policy. Callers must not treat `.note` as dispatch instructions. This will
-resolve once roadmap item `subagent-strip-out` rewrites the source doc; the drift guard will then
-force `complexity-scoring.json` to resync automatically.
-
 A later plan imports what it needs, e.g.:
 
 ```js
 import { modelForGate } from '../tooling/lib/complexity-scoring.mjs'
-const { model } = modelForGate('taskLevel', taskScore)
+const { guidance } = modelForGate('taskLevel', taskScore)
 ```
 
 ### Drift guard

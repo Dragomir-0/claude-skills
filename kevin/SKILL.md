@@ -7,7 +7,7 @@ description: >
   along the way. Reads a FEATURE_PLAN or the codebase map to know what's meant to do, never
   source. Triggered by /kevin.
 disable-model-invocation: false
-allowed-tools: Bash, Read, Write, Glob, Grep, Skill, AskUserQuestion, Artifact, Workflow, mcp__claude-in-chrome, mcp__plugin_chrome-devtools-mcp_chrome-devtools
+allowed-tools: Bash, Read, Write, Glob, Grep, Skill, AskUserQuestion, Artifact, mcp__claude-in-chrome, mcp__plugin_chrome-devtools-mcp_chrome-devtools
 ---
 
 # kevin
@@ -103,6 +103,13 @@ Check the required tier against the model actually powering this session. If it 
 the user and ask them to switch (`/model`) before proceeding, and wait — don't run an `--e2e` pass
 or grade a High-complexity plan under a lower tier "just this once." If they explicitly choose to
 proceed anyway, note it in the report's header.
+
+**Split-execution alternative (`--e2e`, >~5 domains).** The Opus floor above attaches to §6.3's
+cross-domain journey and §6.4/§6.5's consolidated synthesis, not to covering many domains at all
+(see `complexity-scoring.md`'s Grading-level use section). Offer, alongside the plain model-switch
+ask, running §6.2's per-domain coverage as a series of separate passes under `--domain` mode's own
+flat Sonnet-5 floor — then switching to Opus 5 only for the journey and consolidation. §6.1 has the
+mechanics; this still leaves the aggregate synthesis step gated at Opus 5, unchanged.
 
 ## 1 — Get the app running
 
@@ -300,17 +307,10 @@ not the developer reading the Correction Plan — a different audience from the 
 - Report the published URL in the terminal alongside the report's path — it isn't written into the
   report file, and it isn't one of the pipeline's `.claude/` artifacts.
 
-**Model.** Once the grading in §1–§4 is done, drafting this page and publishing it is a
-formatting/writing task over already-decided inputs (title, acceptance criteria, the clean
-screenshots), not a judgment call about the feature itself. Dispatch it — loading
-`artifact-design`, writing the HTML, and calling the `Artifact` tool — to a subagent pinned to
-`claude-haiku-4-5-20251001` (ID per `complexity-scoring.md` § Model reference). Always specify the
-model explicitly; an omitted model inherits the session's own. Hand its brief the plan's
-title/acceptance criteria, the
-base64-encoded screenshots per step, and the rules above (audience, voice, what never to mention).
-If the dispatch tool isn't available (it needs the user's multi-agent opt-in), draft and publish
-in-session and say so — the announcement is the deliverable; the cheaper model is an optimisation.
-It reports back the published URL for you to print alongside the report's path.
+**Never spawn a subagent for this.** Once the grading in §1–§4 is done, load `artifact-design`,
+write the HTML, and publish it with the `Artifact` tool yourself, in this session, using the
+plan's title/acceptance criteria, the base64-encoded screenshots per step, and the rules above
+(audience, voice, what never to mention). Print the published URL alongside the report's path.
 
 ## 6 — End-to-end mode (`--e2e`)
 
@@ -332,8 +332,16 @@ applied per-flow below.
 - **Ask before proceeding.** This runs every time, regardless of how few domains the map has —
   `--e2e` *is* the multi-x jump that checkpoint exists for, not a case that might be small enough
   to skip it.
-- Declined, or scoped down to specific areas → switch to `--domain` for the area(s) named instead
-  of running a partial `--e2e`.
+- **Below the Opus floor for the domain count just named → offer the split-execution alternative
+  (§0b) before falling back to scoping down.** Run §6.2's per-domain coverage one domain at a time
+  under Sonnet 5 — same content a `--domain` run would produce: coverage, issues, and that domain's
+  UI/UX rating — collecting each domain's findings and clean screenshots as you go. Once every
+  domain is covered, ask the user to switch to Opus 5, then run §6.3's cross-domain journey and
+  §6.4/§6.5's consolidated report + `ONBOARDING.md` refresh under Opus 5, folding in the
+  Sonnet-collected per-domain sections rather than re-grading them. Note in the consolidated
+  report's header that per-domain coverage ran under split execution. If the user declines this
+  too, fall back to switching the whole run to Opus 5, or scoping down to specific `--domain` runs
+  instead of a partial `--e2e`.
 
 ### 6.2 — Per-domain coverage
 
@@ -342,6 +350,11 @@ pattern per step as single-feature mode, same exercised/partial/unreachable trac
 each domain with §3b's UI/UX rating too — persona score plus the `ui-ux-pro-max` expert critique
 against that domain's clean screenshots. `--e2e` has no single plan behind any one domain, so the
 Design Direction check is always "n/a" here — never invented.
+
+**Under split execution** (§0b/§6.1), this section runs once per domain as its own Sonnet-5 pass —
+same coverage, issues and UI/UX rating content as above, just scored and run separately rather than
+as part of one aggregate Opus-tier session. Carry each domain's findings and clean screenshots
+forward to §6.3-6.5 rather than re-deriving them once the session switches to Opus 5.
 
 ### 6.3 — Cross-domain journey
 
@@ -409,19 +422,16 @@ rather than published once per feature.
     disk. The file is the deliverable; the Artifact is a convenience, same as `map-codebase`'s
     maps.
 
-**Model.** Same reasoning and dispatch as §5's Model note: the domain grading is done by this
-point, so drafting/regenerating `ONBOARDING.md` and publishing it goes to a `claude-haiku-4-5-20251001`
-subagent, given each domain's map functional description, the screenshots, the
-existing artifact-comment URL (if any), and the voice/content rules above. It performs the
-read-before-republish itself in the same dispatch and reports back the URL and whether the comment
-needs updating.
+**Never spawn a subagent for this.** Same reasoning as §5: the domain grading is done by this
+point, so draft/regenerate `ONBOARDING.md` and publish it yourself, in this session, using each
+domain's map functional description, the screenshots, the existing artifact-comment URL (if any),
+and the voice/content rules above. Perform the read-before-republish yourself before publishing.
 
-**Watch the context on this one.** Haiku 4.5's window is 200K — one-fifth of every other tier (see
-`complexity-scoring.md` § Model reference) — and this is the pipeline's heaviest brief: every
-domain's description plus every screenshot, in a mode that only runs when there are many domains.
-Encoded screenshots are the bulk of it. Split the work per domain across several dispatches, or step
-the drafting up to `claude-sonnet-5`, rather than handing one Haiku subagent the whole project and
-discovering the ceiling mid-run.
+**Watch your own context on this one.** This is the pipeline's heaviest brief: every domain's
+description plus every screenshot, in a mode that only runs when there are many domains. Encoded
+screenshots are the bulk of it. If it risks overflowing the session's context, work through it
+domain by domain — draft and stage each domain's section, then assemble and publish once all are
+ready — rather than trying to hold every domain's screenshots in context at once.
 
 ## Common mistakes
 
@@ -445,6 +455,10 @@ discovering the ceiling mid-run.
 - Naming only the domain/flow count in §6.1 and leaving out the per-domain `ui-ux-pro-max` critique
   cost, or running `--e2e` (or grading a High-complexity plan) under a model below the §0b floor
   instead of telling the user and asking them to switch.
+- Running split execution's §6.3 journey or §6.4/§6.5 consolidation under Sonnet 5 — the Opus floor
+  still applies to that step even after per-domain coverage ran cheaper. Equally, running §6.2's
+  per-domain coverage under Opus 5 when split execution already qualifies each pass for Sonnet 5's
+  flat `--domain` floor is needless spend the other way.
 - Building a §6.3 cross-domain journey on an edge that turns out coincidental, without confirming
   it first.
 - Writing `ONBOARDING.md` from the Issues section or Correction Plan instead of each domain's

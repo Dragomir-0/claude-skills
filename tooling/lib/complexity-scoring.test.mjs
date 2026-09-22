@@ -2,15 +2,14 @@ import { test } from '../../map-codebase/harness.mjs'
 import assert from 'node:assert/strict'
 import { modelInfo, scoreBand, computeScore, modelForGate } from './complexity-scoring.mjs'
 
-test('modelInfo returns correct data for all three tiers', () => {
+test('modelInfo returns correct data for both tiers', () => {
   assert.equal(modelInfo('opus5').id, 'claude-opus-5')
   assert.equal(modelInfo('sonnet5').id, 'claude-sonnet-5')
-  assert.equal(modelInfo('haiku45').id, 'claude-haiku-4-5-20251001')
-  assert.equal(modelInfo('haiku45').contextTokens, 200000)
 })
 
 test('modelInfo throws on unknown tier', () => {
   assert.throws(() => modelInfo('gpt5'))
+  assert.throws(() => modelInfo('haiku45'))
 })
 
 test('scoreBand boundaries: Low/Medium/High', () => {
@@ -51,11 +50,12 @@ test('featureLevel gate boundary: 7 vs 8 switches sonnet5 -> opus5', () => {
   assert.equal(modelForGate('featureLevel', 8).model, 'opus5')
 })
 
-test('taskLevel gate boundaries: 3 vs 4, 7 vs 8', () => {
-  assert.equal(modelForGate('taskLevel', 3).model, 'haiku45')
-  assert.equal(modelForGate('taskLevel', 4).model, 'sonnet5')
-  assert.equal(modelForGate('taskLevel', 7).model, 'sonnet5')
-  assert.equal(modelForGate('taskLevel', 8).model, 'opus5')
+test('taskLevel gate boundaries: 3 vs 4, 7 vs 8 return guidance, not a model', () => {
+  assert.equal(modelForGate('taskLevel', 3).model, undefined)
+  assert.match(modelForGate('taskLevel', 3).guidance, /Mechanical/)
+  assert.match(modelForGate('taskLevel', 4).guidance, /Real judgment/)
+  assert.match(modelForGate('taskLevel', 7).guidance, /Real judgment/)
+  assert.match(modelForGate('taskLevel', 8).guidance, /controller alone/)
 })
 
 test('gradingLevel gate: test-feature-low-optimism is always sonnet5', () => {

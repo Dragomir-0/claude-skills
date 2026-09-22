@@ -41,16 +41,30 @@ function pickBand (bands, score) {
   return { model: band.model, note: band.note }
 }
 
+function pickGuidanceBand (bands, score) {
+  const band = bands.find(b => score >= b.min && score <= b.max)
+  if (!band) throw new Error(`score out of range for gate: ${score}`)
+  return { guidance: band.guidance }
+}
+
 // gateName: 'featureLevel' | 'taskLevel' | 'gradingLevel' | 'mapLevel'
 // score: required for featureLevel/taskLevel, and for gradingLevel mode 'test-feature-high-optimism'
 // opts.mode: required for gradingLevel and mapLevel gates (mode-keyed, not pure score lookups)
 // opts.domainCount: required for gradingLevel mode 'kevin-e2e'
+//
+// featureLevel returns { model, note } — it gates the interactive session's own model.
+// taskLevel returns { guidance } only — execute-plan never dispatches, so a task score feeds
+// verification rigor, not a model choice.
 export function modelForGate (gateName, score, opts = {}, config = loadConfig()) {
   const gate = config.gates[gateName]
   if (!gate) throw new Error(`unknown gate: ${gateName}`)
 
-  if (gateName === 'featureLevel' || gateName === 'taskLevel') {
+  if (gateName === 'featureLevel') {
     return pickBand(gate, score)
+  }
+
+  if (gateName === 'taskLevel') {
+    return pickGuidanceBand(gate, score)
   }
 
   if (gateName === 'gradingLevel') {

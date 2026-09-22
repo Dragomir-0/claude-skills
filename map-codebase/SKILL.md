@@ -6,7 +6,7 @@ description: >
   longer resolve, or when a session would otherwise have to read source to learn how a feature
   flows end to end. Invoked as /map-codebase.
 disable-model-invocation: false
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Artifact, Workflow
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Artifact
 ---
 
 # map-codebase
@@ -226,23 +226,12 @@ that writes seven files publishes seven artifacts.
 
 ### Model
 
-By the time a map reaches this section its content is finished and has passed `verify` — nothing
-left in the publish step is a judgment call, it is a mechanical read-URL/call-tool loop. Dispatch
-it to a subagent pinned to `claude-haiku-4-5-20251001` (ID per `complexity-scoring.md` § Model
-reference) rather than doing it in-session: one dispatch per file, or one dispatch handling the
-whole batch when several maps changed in a run. Always specify the model explicitly — an omitted
-model inherits the session's own. Specify nothing but the model: no `effort` or other request
-fields, which are unverified on the dispatch surface.
-
-**If the dispatch tool isn't available** — it needs the user's multi-agent opt-in, and that may be
-off or the tool may be absent entirely — **publish in-session and say so plainly.** The Red flag
-below is about not *wastefully* spending the session's own model on mechanical work when a cheaper
-subagent is available; it is not a reason to skip publishing or to stall the run. An unavailable
-tool is a stated degradation, never a silent one. Hand the subagent's brief the file's path, its `description` and (first publish only)
-`favicon`, and — for a republish — the existing URL from `## Published artifacts`; have it perform
-the `action: "read"` on that URL itself before publishing, in the same dispatch, since the refusal
-to overwrite an unread artifact is checked against whoever is about to call publish. It reports
-back the URL(s); fold those into `## Published artifacts` yourself as normal.
+**Never spawn a subagent for this.** By the time a map reaches this section its content is
+finished and has passed `verify` — publishing is a mechanical read-URL/call-tool loop, but you do
+it yourself, in this session: one file at a time, or the whole batch when several maps changed in
+a run. For a republish, read the existing URL from `## Published artifacts` first — the tool
+refuses to overwrite an artifact this conversation hasn't read — then publish and fold the
+resulting URL(s) into `## Published artifacts` yourself.
 
 **Publish the `.md` file itself.** This is the explicit skill instruction the Artifact tool's
 format rule requires, and it is deliberate: rendering a map as HTML would fork its content, and a
@@ -312,10 +301,6 @@ One cheap `Glob` batch decides this. **Never re-walk the tree "to make sure."**
 - Finishing without running `verify`, or without updating the ledger.
 - Regenerating every map on `--update` when the script named one.
 - Finishing a build without publishing the maps, or publishing on `--verify`.
-- Publishing in-session instead of dispatching the Haiku-pinned subagent from `## Publishing ›
-  Model` **while that dispatch was actually available** — the publish step is mechanical and doesn't
-  need the session's own model. (If the dispatch tool is unavailable, publishing in-session and
-  saying so is the correct behaviour, not a red flag.)
 - Publishing without `url` on a rebuild — that creates a duplicate artifact and strands the link
   people already have.
 - Converting a map to HTML to publish it, forking it from the file on disk.
