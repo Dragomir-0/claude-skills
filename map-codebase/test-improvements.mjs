@@ -320,7 +320,7 @@ test('#4 update sees work committed since the map was generated', () => {
   assert.deepEqual(changedFiles(f.root, baseline), ['src/Orders/A.cs'])
 
   const json = JSON.parse(runCli(['update', '--root', f.root]).out)
-  assert.deepEqual(json.changed, ['src/Orders/A.cs'])
+  assert.equal(json.changedTotal, 1)
   const m = json.maps.find(x => x.map.endsWith('orders.md'))
   assert.equal(m.regenerate, true)
   assert.deepEqual(m.changed, ['src/Orders/A.cs'])

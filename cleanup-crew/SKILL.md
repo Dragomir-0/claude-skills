@@ -143,7 +143,7 @@ Returns `{"ok": true}` or `{"ok": false, "stderr"}`. On failure, stop and surfac
 node ~/.claude/skills/tooling/cli.mjs git-orchestration.stashPop '["."]'
 ```
 
-Returns `{"conflict": bool, "conflictedFiles": [...], "raw"}` — `conflictedFiles` comes from a
+Returns `{"conflict": bool, "conflictedFiles": [...], "raw"?}` (`raw` only when the pop failed) — `conflictedFiles` comes from a
 fresh porcelain status scan for unmerged codes, stable across git versions/locales rather than
 parsed from `stash pop`'s human-readable stdout.
 

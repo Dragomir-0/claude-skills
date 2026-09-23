@@ -87,7 +87,7 @@ Exports (each takes `root` first):
   }`. Pre-checks upstream existence via plumbing before ever invoking `pull`, so a repo with no
   tracking branch fails fast with a named step instead of an opaque subprocess error.
 - `createBranch(root, name)` — `{ ok }` or `{ ok: false, stderr }`; `git checkout -b <name>`.
-- `stashPop(root)` — `{ conflict, conflictedFiles, raw }`. `conflictedFiles` comes from a fresh
+- `stashPop(root)` — `{ conflict, conflictedFiles, raw? }` (`raw` only when the pop failed). `conflictedFiles` comes from a fresh
   `git status --porcelain` scan for unmerged codes (`UU`/`AA`/`DD`/`AU`/`UA`/`UD`/`DU`) — stable
   across git versions/locales, never parsed from `stash pop`'s human-readable stdout.
 

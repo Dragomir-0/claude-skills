@@ -72,5 +72,8 @@ export function stashPop (root) {
   const conflictedFiles = statusShort(root).entries
     .filter(e => UNMERGED_CODES.has(e.status))
     .map(e => e.path)
-  return { conflict: conflictedFiles.length > 0, conflictedFiles, raw: r.stdout || r.stderr }
+  // `raw` only on failure: a clean pop's stdout is a full `git status` listing nobody reads.
+  const out = { conflict: conflictedFiles.length > 0, conflictedFiles }
+  if (!r.ok) out.raw = r.stdout || r.stderr
+  return out
 }

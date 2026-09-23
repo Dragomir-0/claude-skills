@@ -190,6 +190,7 @@ export function findEntryPoints (files, root) {
   const out = new Set()
 
   if (root) {
+    const present = new Set(files)
     for (const f of files) {
       if (path.posix.basename(f) !== 'package.json') continue
       let pkg
@@ -199,7 +200,7 @@ export function findEntryPoints (files, root) {
       for (const d of declared) {
         if (!d) continue
         const rel = (dir === '.' ? d : `${dir}/${d}`).replace(/^\.\//, '')
-        if (files.includes(rel)) out.add(rel)
+        if (present.has(rel)) out.add(rel)
       }
     }
   }
@@ -495,13 +496,20 @@ export function verifyMaps (root, { maxAgeDays = 14, now = Date.now() } = {}) {
   // case-sensitive filesystem. It is never used to decide that a path exists: git ls-files reads
   // the index, so a file deleted from the working tree is still listed, and trusting it would let
   // the commonest drift of all — someone deleted the file — pass as clean.
-  const byLower = new Map()
-  for (const f of listFiles(root)) byLower.set(f.toLowerCase(), f)
+  // Built lazily: a clean run never needs it, and listFiles() is a full git ls-files.
+  let byLower = null
+  const lowerIndex = () => {
+    if (!byLower) {
+      byLower = new Map()
+      for (const f of listFiles(root)) byLower.set(f.toLowerCase(), f)
+    }
+    return byLower
+  }
 
   const resolve = cited => {
     const abs = path.join(root, cited)
     if (!fs.existsSync(abs)) {
-      const match = byLower.get(cited.toLowerCase())
+      const match = lowerIndex().get(cited.toLowerCase())
       if (match && match !== cited) return { ok: false, reason: 'case mismatch', actual: match }
       return { ok: false, reason: 'missing' }
     }
@@ -532,9 +540,7 @@ export function verifyMaps (root, { maxAgeDays = 14, now = Date.now() } = {}) {
     }
     for (const spaced of citedPaths(o.text, { withSpaces: true })) {
       if (!resolve(spaced).ok) {
-        unverified.push({
-          map: o.map, path: spaced, note: 'contains a space; not treated as drift'
-        })
+        unverified.push({ map: o.map, path: spaced })
       }
     }
     for (const hit of lintMapText(o.text)) guardrail.push({ map: o.map, ...hit })
@@ -554,6 +560,7 @@ export function verifyMaps (root, { maxAgeDays = 14, now = Date.now() } = {}) {
     ok: drift.length === 0 && guardrail.length === 0,
     drift,
     unverified,
+    ...(unverified.length && { unverifiedNote: 'paths contain a space; not treated as drift' }),
     guardrail,
     maps,
     emptyMaps: maps.filter(m => m.cited === 0 && !m.map.endsWith('/index.md')).map(m => m.map),
@@ -788,6 +795,24 @@ export function discoverEdges (repos, { maxSites = DEFAULT_MAX_SITES } = {}) {
         text = fs.readFileSync(abs, 'utf8')
       } catch { continue }
 
+      // Newline offsets, built on first need: re-splitting the file prefix per match was
+      // quadratic in file size for route-heavy files.
+      let nl = null
+      const lineAt = idx => {
+        if (!nl) {
+          nl = []
+          for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) nl.push(i)
+        }
+        let lo = 0
+        let hi = nl.length
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1
+          if (nl[mid] < idx) lo = mid + 1
+          else hi = mid
+        }
+        return lo + 1
+      }
+
       for (const { kind, re, segments } of EDGE_MATCHERS) {
         for (const m of text.matchAll(re)) {
           if (!m[1]) continue
@@ -805,7 +830,7 @@ export function discoverEdges (repos, { maxSites = DEFAULT_MAX_SITES } = {}) {
               entry.sites.push({
                 repo: repo.name,
                 file: rel,
-                line: text.slice(0, m.index).split('\n').length
+                line: lineAt(m.index)
               })
             }
           }
@@ -880,7 +905,8 @@ const TEST_CAP = 15
 const CI_CAP = 20
 const CHANGE_CAP = 200
 
-function say (obj) { process.stdout.write(JSON.stringify(obj, null, 2) + '\n') }
+// Compact, not indented: this output is read by a model, and indentation is pure token cost.
+function say (obj) { process.stdout.write(JSON.stringify(obj) + '\n') }
 
 /** Whether maps already exist, and how many search hints the ledger holds. */
 function mapsState (root) {
@@ -954,27 +980,32 @@ function scanCmd (root, flags) {
 function updateCmd (root, flags) {
   const owners = mapOwnership(root)
   const head = git(root, ['rev-parse', 'HEAD'], 65536)
-  const perMap = owners.map(o => changedFiles(root, o.sha))
-  const union = [...new Set([...changedFiles(root), ...perMap.flat()])].sort()
+  // Maps generated together share a baseline; diff each distinct one once.
+  const bySha = new Map()
+  const diff = sha => {
+    if (!bySha.has(sha)) bySha.set(sha, changedFiles(root, sha))
+    return bySha.get(sha)
+  }
+  const union = [...new Set([...diff(null), ...owners.flatMap(o => diff(o.sha))])].sort()
   const { byMap, unowned } = assignChanges(owners, union)
   const cap = arr => (flags.full ? arr : arr.slice(0, CHANGE_CAP))
   const now = Date.now()
   const out = {
     root,
     headSha: head ? head.trim().slice(0, 12) : null,
-    changed: cap(union),
+    // The union itself is not listed: it is exactly maps[].changed plus unowned.
     changedTotal: union.length,
     maps: owners.map(o => {
       const mine = byMap.get(o.map) ?? []
-      return {
+      const row = {
         map: o.map,
         baseline: o.sha,
         generated: o.generated,
         ageDays: o.generated ? ageInDays(o.generated, now) : null,
-        changed: cap(mine),
-        changedTotal: mine.length,
         regenerate: mine.length > 0
       }
+      if (mine.length) Object.assign(row, { changed: cap(mine), changedTotal: mine.length })
+      return row
     }),
     unowned: cap(unowned),
     unownedTotal: unowned.length
@@ -1023,7 +1054,8 @@ function edgesCmd (ws, flags) {
     root: ws.root,
     name: ws.name,
     edgeCount: edges.length,
-    edges: shown,
+    // Sites as "repo:file:line" strings: repeating the object keys tripled each site's size.
+    edges: shown.map(e => ({ ...e, sites: e.sites.map(s => s.repo + ':' + s.file + ':' + s.line) })),
     internalCount: internal.length
   }
   if (shown.length < edges.length) out.omitted = edges.length - shown.length
