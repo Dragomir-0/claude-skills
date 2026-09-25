@@ -19,7 +19,7 @@ A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a 
 |---|---|---|
 | **`/map-codebase`** | Builds high-signal architecture maps so later sessions understand end-to-end feature flows without reading source. Gates the session's own model (Sonnet 5 floor) on a full build or `--update`; `--verify` is a zero-token drift check with no model floor. | architecture maps |
 | **`/plan-feature`** | Turns an Azure DevOps ticket **or** a written description into a three-tier implementation plan with File Impact Manifests, scored effort, milestones and hard pauses. Scores feature complexity and gates the session's own model (Sonnet vs Opus). Never touches source. | the plan file |
-| **`/execute-plan`** | Executes an approved plan milestone by milestone: decomposes into atomic tasks, scores each one and dispatches capped subagents (Haiku/Sonnet) via the `Workflow` tool under a hard token ceiling, verifies every result as controller, re-checks regressions, and stops at each milestone for me to test. `--roadmap` loops build/test-feature/kevin across every active roadmap item. | source + a ledger |
+| **`/execute-plan`** | Executes an approved plan milestone by milestone: decomposes into atomic tasks, scores each one, implements and verifies every task itself in the current session under a hard token ceiling, re-checks regressions, and stops at each milestone for me to test. `--roadmap` loops build/test-feature/kevin across every active roadmap item. | source + a ledger |
 | **`/test-feature`** | Grades the implemented feature against its plan at a chosen rigour (`--optimism 1-5`), measuring real coverage at level 3+, and checking completeness, security, deployment, pipeline and efficiency. Never spawns subagents — the whole run stays in one evidence trail. Never touches source. | a test report |
 | **`/kevin`** | Plays a careless first-time user through the live frontend — a feature, a whole map domain, or the entire project — deliberately mistyping and misclicking, and reports every bug, crash and confusing moment. Reads the plan/map, never source. | a bug report (+ onboarding doc) |
 | **`/cleanup-crew`** | Stashes, branches off an up-to-date base, restores the work, refreshes docs, and drives a reviewed conventional commit and push ready for a PR. | a branch + commit |
@@ -34,8 +34,8 @@ Optional background systems that run automatically, not on command:
 | **`context-threshold-hook`** | Monitors transcript size and automatically enforces context clearing when ~150k tokens are reached. Writes a handoff document before clearing, then resumes from it on the next session. Prevents context-window exhaustion in long-running sessions. |
 
 `_shared/pipeline-contract.md` holds the artifact paths, repo resolution, `<Name>` derivation, cost
-discipline and the dispatch-surface rules that these skills read, and
-`_shared/complexity-scoring.md` holds the **model reference** (IDs, context windows, prices — the
+discipline and the no-subagent policy that these skills read, and
+`_shared/complexity-scoring.md` holds the **model reference** (Opus 5 / Sonnet 5 IDs — the
 single source of truth for every skill) plus the shared 4-factor rubric (scope, ambiguity, risk,
 uncertainty; 1-10) that `plan-feature` and `execute-plan` score against — `test-feature` and `kevin` don't score anything themselves, but reuse that same
 score (read from the plan header) to set their own minimum model tier, so grading rigor tracks
@@ -58,10 +58,13 @@ If `~/.claude/skills` already exists and has content you want to keep, clone els
 
 ```bash
 git clone https://github.com/Steelwool9925/claude-skills.git /tmp/claude-skills
-cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin,document-changes} ~/.claude/skills/
+cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin,document-changes,tooling} ~/.claude/skills/
 mkdir -p ~/.claude/skills/_shared
 cp /tmp/claude-skills/_shared/{pipeline-contract.md,complexity-scoring.md} ~/.claude/skills/_shared/
 ```
+
+`tooling/` isn't optional: every skill's model-gate lookups, and every step of `cleanup-crew`,
+shell out to `node ~/.claude/skills/tooling/cli.mjs` at that fixed path — see `tooling/README.md`.
 
 On Windows the path is the same: `C:\Users\<you>\.claude\skills\`.
 
@@ -77,7 +80,8 @@ The end state you want (skills only):
 ├── kevin/SKILL.md
 ├── map-codebase/         SKILL.md + map.mjs + test scripts
 ├── plan-feature/SKILL.md
-└── test-feature/SKILL.md
+├── test-feature/SKILL.md
+└── tooling/              cli.mjs + lib/ + config/ — see tooling/README.md
 ```
 
 ### Step 2: Install hooks (optional)
@@ -119,13 +123,14 @@ Add the `anthropics/claude-plugins-official` marketplace, then install **superpo
 `/map-codebase` runs `map.mjs`. It imports Node builtins only (`node:fs`, `node:path`,
 `node:child_process`, `node:url`), so there is **no `npm install`** — Node just has to be on PATH.
 
-### Recommended — multi-agent opt-in, for `/execute-plan`, `/kevin` and `/map-codebase`
+### Note — no subagents, by design
 
-All three dispatch subagents via the `Workflow` tool: capped implementers and verifiers in
-`/execute-plan`, Haiku-pinned artifact/report drafting in `/kevin`, Haiku-pinned map publishing in
-`/map-codebase`. None of them *requires* it — without the opt-in `/execute-plan` degrades to
-controller-only single-threaded execution, and `/kevin` and `/map-codebase` do their drafting and
-publishing in-session. Every skill states which mode it ran in rather than degrading silently.
+None of these skills dispatch subagents. `/execute-plan`, `/kevin` and `/map-codebase` implement,
+verify, draft and publish entirely in the calling session — there is nothing to opt into and no
+`Workflow`/dispatch tool dependency to install. The only way a subagent ever runs is you asking for
+one yourself, ad hoc, in the moment, gated by your own harness permission mode or tool-allowlist —
+never a standing "work autonomously" instruction. See `_shared/pipeline-contract.md`'s
+"No subagents, anywhere" section for the full policy.
 
 ### Required — a browser surface, for `/kevin`
 

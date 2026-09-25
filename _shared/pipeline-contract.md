@@ -197,10 +197,10 @@ Applies to every stage. Inherited from the retired `batman` skill, which proved 
 - **Search narrow.** `Glob` for structure; `Grep` with `glob`/`type` filters and `head_limit` for
   content. Never `Read` or list a whole directory to see what is there.
 - **Read only the relevant span** of a large file, not the whole thing.
-- **Escalation checkpoint.** When the only way forward multiplies spend so far — broad subagent
-  fan-out, a filter-less repo-wide grep, reading large files whole — STOP and ask. State what was
-  tried and why it was insufficient, the specific higher-effort step wanted, and its rough token
-  cost. Ask for the smallest step that unblocks you; re-ask to go further.
+- **Escalation checkpoint.** When the only way forward multiplies spend so far — a filter-less
+  repo-wide grep, reading large files whole — STOP and ask. State what was tried and why it was
+  insufficient, the specific higher-effort step wanted, and its rough token cost. Ask for the
+  smallest step that unblocks you; re-ask to go further.
 
 A standing "work autonomously" instruction does not pre-authorise a large spend. It lowers the
 bar for trivial chatter, not for a deliberate multi-x token jump — that decision is the user's.
@@ -211,24 +211,35 @@ bar for trivial chatter, not for a deliberate multi-x token jump — that decisi
 | "This fan-out is the routine cost of the ticket" | Routine or not, it is a deliberate multi-x jump over what you have spent. Ask. |
 | "The user said work autonomously" | That lowers the bar for chatter, not for a large spend. |
 | "It's read-only, so spending is fine" | Read-only tokens cost the same as any other tokens. |
-| "The cheaper model makes this dispatch cheap" | Judge cost per *completed* task. A cheap attempt that fails, retries a tier up, and drags a verification behind it cost more than starting at the right tier. |
 
-## Dispatch surface
+## No subagents, anywhere
 
-Skills that dispatch subagents (`execute-plan`, and the Haiku-pinned publish/draft steps in
-`map-codebase` and `kevin`) assume a harness dispatch tool that accepts a **model** per dispatch.
-Anything beyond that — budget accounting, `effort`, `thinking`, or any other Claude API request
-field — is **not verified to exist** on that surface and must never be written into a skill as an
-instruction to pass.
+**No pipeline skill ever spawns a subagent** — not `execute-plan`, not `map-codebase` or `kevin`'s
+publish/draft steps, not any other stage. Every step — implementation, verification, the mechanical
+publish/draft steps this pipeline used to hand to a cheaper model — runs in the calling session
+itself. This is a hard rule, not a per-skill default; a skill's own text may still describe a
+dispatch step from before this rule existed, and where it does, this rule overrides it.
 
-This matters because the failure is silent: a fabricated parameter is dropped without error, the run
-looks normal, and the instruction reads as authoritative to every later session. Two rules follow.
+**Self-enforcement is real enforcement, and it is the only kind available here.** Every ceiling in
+this pipeline (`execute-plan`'s 350k/milestone, `kevin`'s domain-count floor) is checked by the
+**session's own control flow** — before each task, against a **running total of actual reported
+spend**, never against a pre-run projection restated as if it were still current. This is not a
+weaker guarantee than an external enforcement mechanism, provided the check reads **measured**
+numbers — the session's own reported token count so far, not an estimate made before the run
+started. A skill that checks a stale projection instead of the ledger's actual running total has a
+real gap, even though its ceiling is stated correctly; that is a defect in the skill, not a
+limitation of self-enforcement as a mechanism.
 
-- **Control cost through what is verifiable** — which tier is dispatched, how tightly the brief is
-  scoped, how much context it carries, and how many dispatches happen at all.
-- **If a tool the skill expects isn't there, say so and stop** — name the missing capability to the
-  user rather than approximating it. A budget the harness does not enforce is an estimate, and must
-  be reported as one.
+**Do not invent request parameters.** `effort`, `thinking`, and per-request budgets are Claude API
+request fields with no bearing on a single session's own work; never write an instruction implying
+they can be set on some other execution surface.
+
+**The one exception, and only at the user/session level.** This hard rule governs what a skill may
+build, recommend, or default to — never what the user themselves may ask for in the moment. A
+subagent may still run, but only when the user gives express, in-the-moment permission for that
+specific use, and only if the harness's own permission mode or tool-allowlist actually lets that
+`Agent`/`Workflow` call through — never a standing "work autonomously" instruction treated as
+pre-authorization, and never a pathway a skill builds toward or falls back to on its own.
 
 ---
 

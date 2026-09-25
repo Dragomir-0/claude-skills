@@ -46,7 +46,19 @@ Run `map.mjs workspace` first.
    have not shown.
 3. Any repo may be **skipped or aborted** without affecting the others. Say clearly what that
    leaves behind.
-4. Finish with a summary table: repo, branch, commit hash, push result, PR URL.
+4. Finish with a summary table: repo, branch, commit hash, push result, PR URL. Accumulate one
+   `{repo, branch, commit, pushResult, prUrl}` row per repo as you work through them — `commit`/
+   `pushResult` may literally be `"skipped"` or `"aborted"` for a repo that didn't make it, so
+   partial completion still renders plainly rather than needing special-casing — then format the
+   finished array once:
+
+```bash
+node ~/.claude/skills/tooling/cli.mjs cross-repo-table.formatSummaryTable '[<accumulated rows array>]'
+```
+
+   Returns the markdown table itself, ready to show the user. A row missing `repo`/`branch`/
+   `commit`/`pushResult` throws, naming the row and the missing field, rather than silently
+   rendering a gap in a report people read to know what actually shipped.
 
 **Partial completion is expected and is not an error.** If repo 3 fails, repos 1 and 2 stay
 pushed. Report that plainly — do not attempt to unwind commits in other repositories, which is
@@ -80,17 +92,19 @@ trivially — do not treat that as a failure.
 ## 1 — Stash current changes
 
 ```bash
-git status --short
+node ~/.claude/skills/tooling/cli.mjs git-orchestration.statusShort '["."]'
 ```
 
-If there are uncommitted changes:
+Returns `{"clean": bool, "entries": [{"status", "path"}]}`. If not clean:
 
 ```bash
-git stash push -u
+node ~/.claude/skills/tooling/cli.mjs git-orchestration.stashPush '["."]'
 ```
 
-`-u` includes untracked files. If the tree is clean, say so and skip to step 2 — there may still
-be a branch worth creating.
+Returns `{"stashed": bool, "message"}` — `stashed: false` means there was nothing to stash
+(detected deterministically, not parsed from git's human-readable stdout). `-u` (untracked files
+included) is baked into the call. If the tree is clean, say so and skip to step 2 — there may
+still be a branch worth creating.
 
 ## 2 — Base branch selection — **HARD PAUSE**
 
@@ -101,12 +115,13 @@ Ask, verbatim:
 **WAIT.** Do not proceed until the user gives a branch name. Then:
 
 ```bash
-git checkout <base_branch>
-git pull
+node ~/.claude/skills/tooling/cli.mjs git-orchestration.checkoutAndPull '[".", "<base_branch>"]'
 ```
 
-If `git pull` fails (no upstream, diverged history, auth), stop and surface the error. Do not
-continue onto a stale base.
+Returns `{"ok": true}` or `{"ok": false, "step": "checkout"|"pull", "stderr"}` — pre-checks
+upstream existence before ever invoking `pull`, so a repo with no tracking branch fails fast with
+a clear `step` rather than an opaque subprocess error. On `ok: false`, stop and surface `stderr`
+verbatim. Do not continue onto a stale base.
 
 ## 3 — Feature branch creation — **HARD PAUSE**
 
@@ -117,17 +132,22 @@ Ask, verbatim:
 **WAIT.** Then:
 
 ```bash
-git checkout -b <new_branch>
+node ~/.claude/skills/tooling/cli.mjs git-orchestration.createBranch '[".", "<new_branch>"]'
 ```
+
+Returns `{"ok": true}` or `{"ok": false, "stderr"}`. On failure, stop and surface the error.
 
 ## 4 — Apply the stash — **HARD PAUSE on any conflict**
 
 ```bash
-git stash pop
-git status
+node ~/.claude/skills/tooling/cli.mjs git-orchestration.stashPop '["."]'
 ```
 
-**On any conflict, STOP and ask.** Show the conflicted files and both sides, and wait for the
+Returns `{"conflict": bool, "conflictedFiles": [...], "raw"?}` (`raw` only when the pop failed) — `conflictedFiles` comes from a
+fresh porcelain status scan for unmerged codes, stable across git versions/locales rather than
+parsed from `stash pop`'s human-readable stdout.
+
+**On `conflict: true`, STOP and ask.** Show `conflictedFiles` and both sides, and wait for the
 user to decide per file.
 
 This skill does **not** auto-resolve in favour of the stashed changes. Silently discarding a
@@ -136,8 +156,9 @@ bump, a migration — is not an acceptable default, and the person best placed t
 who wrote both. Resolve only what the user directs, then confirm the working tree is clean and
 the changes applied.
 
-If `git stash pop` fails for any other reason, abort and surface the error. Never drop a stash to
-"clean things up".
+If the call fails for any other reason (not a conflict), abort and surface `raw`. Never drop a
+stash to "clean things up" — the module has no `stash drop` export at all, so that shortcut is
+structurally unavailable, not merely discouraged.
 
 ## 5 — Docs refresh
 
@@ -147,14 +168,19 @@ line rather than bolting a note on the end.
 
 **changes.md** — an untracked, append-only changelog at the project root:
 
-1. Ensure `changes.md` is listed in `.gitignore`; add the entry if missing.
-2. Ask the user for the ticket number(s) for this change. Remember them for step 7.
-3. **Append** — never overwrite — a dated entry. Get the date from `date +%Y-%m-%d`:
+1. Ensure it's gitignored — idempotent, safe to call even if already present:
 
+```bash
+node ~/.claude/skills/tooling/cli.mjs changelog.ensureGitignored '["."]'
 ```
-## <YYYY-MM-DD> — <ticket(s)>
-- <change 1>
-- <change 2>
+
+2. Ask the user for the ticket number(s) for this change. Remember them for step 7.
+3. **Append** — never overwrite — a dated entry. Deciding what the bullets say stays yours; the
+   module only writes them out, guarding against a missing trailing newline so the new entry
+   never glues onto the previous line:
+
+```bash
+node ~/.claude/skills/tooling/cli.mjs changelog.appendEntry '[".", {"date":"<YYYY-MM-DD, from date +%Y-%m-%d>","tickets":["<ticket>"],"bullets":["<change 1>","<change 2>"]}]'
 ```
 
 ## 6 — Summarise and gather context — **HARD PAUSE**
@@ -170,38 +196,80 @@ them and confirm.
 
 ## 7 — Commit and push — **HARD PAUSE before committing**
 
-Show the staged file list for confirmation first, then compose the commit with **three** `-m`
-flags in this exact structure:
+Show the staged file list for confirmation first (`git status --short`). Then compose the commit
+deterministically — deciding the title, description and ticket list stays yours; the module only
+builds the argv and enforces the guardrails:
 
 ```bash
-git add -A
-git commit -m "<title of the changes>" -m "<short description of all the changes>" -m "<tickets as #<number>, space-delimited>"
-git push -u origin <new_branch>
+node ~/.claude/skills/tooling/cli.mjs commit-composer.composeCommitArgs '[{"title":"<title>","description":"<description>","tickets":["<number>"]}]'
 ```
 
-- 1st `-m`: concise title of the changes.
-- 2nd `-m`: short description of all the changes.
-- 3rd `-m`: each ticket as `#<number>`, space-delimited — e.g. `#123 #456`. If the user said
-  'none', omit the third flag rather than committing an empty one.
+Ticket numbers go in bare (`"123"`, not `"#123"`) — the module prefixes each with `#` itself. An
+empty `tickets` array omits the third `-m` flag entirely, matching this skill's exact instruction —
+if the user said 'none', pass `"tickets": []` rather than an empty string. Feed the returned argv
+to `formatCommand` for a properly quoted, human-readable approval string:
 
-**Show the fully composed command and get approval before running it.** Then report the commit
-hash, the push result, and any remote branch or PR URL git prints.
+```bash
+node ~/.claude/skills/tooling/cli.mjs commit-composer.formatCommand '[<argv from composeCommitArgs>]'
+```
+
+**Show the fully composed command and get approval before running it.** Then:
+
+```bash
+node ~/.claude/skills/tooling/cli.mjs commit-composer.runCommit '[".", <argv from composeCommitArgs>]'
+node ~/.claude/skills/tooling/cli.mjs commit-composer.pushBranch '[".", "<new_branch>"]'
+```
+
+`runCommit` runs `git add -A` then the commit argv, never a shell. `pushBranch` throws *before
+running anything* if `<new_branch>` is `main`/`master` or doesn't match the currently checked-out
+branch — "never force-push, never push to main" is structurally unreachable here, not merely a
+rule to remember; the function has no force-push parameter at all. Report the commit hash, the
+push result, and any remote branch or PR URL git prints.
 
 ## 8 — Remove completed plans
 
-Scan `.claude/plans/FEATURE_PLAN_*.md` (and, in a workspace, the container's `.claude/plans/`).
-For each one, check its companion `<Name>.ledger.md`:
+```bash
+node ~/.claude/skills/tooling/cli.mjs plan-pruning.scanPlansDir '[".claude/plans"]'
+```
 
-- **Every milestone shows `APPROVED by user`, none still awaiting approval** → the plan is
+(the container's `.claude/plans` too, in a workspace). Reports every `FEATURE_PLAN_*.md` found,
+each with `{"safe": bool, "reason"?, "pendingMilestones"?}` — `safe` compares the `(chosen)`
+tier's milestone numbers in the plan itself against every `APPROVED | milestone=<N> |` line in its
+companion `<Name>.ledger.md` (written by `/execute-plan` §6 on each hard-stop approval):
+
+- **`safe: true`** → every milestone the chosen tier defines has a matching approval. The plan is
   finished. Delete both the plan and its ledger.
-- **No ledger yet, or a milestone still awaiting approval, or a fix round in progress** → leave it
-  alone. It is live recovery state, not clutter, whether or not it relates to the branch just
-  pushed.
+- **`safe: false`** → leave it alone, whatever the reason (`pending-approval` with the list of
+  still-unapproved milestones, `no-ledger`, `no-chosen-tier`, or `malformed-plan`). It is live
+  recovery state, not clutter, whether or not it relates to the branch just pushed — a
+  `no-chosen-tier`/`malformed-plan` result means the plan predates this convention or is genuinely
+  malformed, not that it's safe to guess about; leave those for a human to look at too.
 
 Leave `.claude/reports/` untouched — this step only prunes `.claude/plans/`. These files are
 gitignored per the pipeline contract and never reach the commit either way, so removing them is
 pure workspace tidying, not something that changes what was just pushed. Runs automatically, no
 hard pause — but state plainly which plans (if any) were removed, and which were left and why.
+
+## 9 — Remove the consumed handoff document
+
+Once the branch is committed and pushed, any handoff document written for this session's working
+directory describes state that no longer exists — the work it was meant to hand off is now landed.
+
+Locate it in `~/.claude/handoff/`: sanitize the absolute working directory path by replacing every
+`:` and `\` with `-` (e.g. `C:\Users\Jason_Weiss\Projects\claude-skills` becomes
+`C--Users-Jason-Weiss-Projects-claude-skills`), then look for `<sanitized>.md` and its sibling
+`<sanitized>.requested` in that directory.
+
+- **Either file exists** → delete whichever are present. The work they described is committed and
+  pushed; there is nothing left to hand off.
+- **Neither exists** → nothing to do, say so.
+
+**Never touch another workspace's handoff files.** Match only the sanitized path for *this*
+session's own working directory — every other `*.md`/`*.requested` pair in `~/.claude/handoff/`
+belongs to a different project's in-progress or unread recovery state, and deleting one destroys
+context that cannot be reconstructed.
+
+Runs automatically, no hard pause — but state plainly whether a handoff document was removed.
 
 ## Guardrails
 
@@ -227,6 +295,8 @@ hard pause — but state plainly which plans (if any) were removed, and which we
 - Skipping the drift preflight because "it's probably fine". It is free.
 - Deleting a plan whose ledger isn't fully approved, or one with no ledger at all — step 8 removes
   only genuinely finished plans, never mid-flight or unstarted ones.
+- Deleting a handoff document belonging to a different workspace than the one just committed —
+  step 9 matches only this session's own sanitized working-directory path.
 
 ## End of the pipeline
 

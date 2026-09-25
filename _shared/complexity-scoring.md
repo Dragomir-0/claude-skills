@@ -4,12 +4,17 @@ This file is read by `plan-feature` and `execute-plan` — the only place the co
 defined, so both skills score the same way and a score means the same thing wherever it's shown.
 It complements `pipeline-contract.md`, not replaces it.
 
+**No pipeline skill ever spawns a subagent.** Every score below feeds a recommendation on which
+model the interactive session itself should be running as, or how much verification rigor a task
+deserves — never a dispatch tier, since nothing is ever dispatched.
+
 The rubric is used at two different grains:
 
 - **Feature-level** (`plan-feature`, at ingestion) — how hard is *this whole request* to design?
   Feeds a recommendation on which interactive model the planning work should run under.
 - **Task-level** (`execute-plan`, at decompose) — how hard is *this one atomic task* to implement?
-  Feeds which model tier a subagent gets dispatched at, or whether it's dispatched at all.
+  Feeds how much verification rigor it gets, and whether to flag that the session should be
+  running a stronger model before implementing it.
 
 Same four factors, same 1-10 scale, applied at whichever grain the calling skill is working at.
 
@@ -17,38 +22,20 @@ Same four factors, same 1-10 scale, applied at whichever grain the calling skill
 
 ## Model reference
 
-**This table is the single source of truth for model IDs across every pipeline skill.** A skill may
-repeat an ID inline where it actually specifies a dispatch, but this table wins on any disagreement,
-and a model change is made here first. Verified against the `claude-api` skill's model table
-(cached 2026-06-24).
+**This table is the single source of truth for interactive-session model IDs across every
+pipeline skill.** Every gate below (feature-level, task-level, grading-level, map-level) names one
+of these two — there is no third, cheaper tier, since no skill ever runs anything outside the
+interactive session.
 
-| Tier | Model ID | Context | Input $/MTok | Output $/MTok |
-|---|---|---|---|---|
-| Opus 5 (controller) | `claude-opus-5` | 1M | $5 | $25 |
-| Sonnet 5 | `claude-sonnet-5` | 1M | $2 | $10 |
-| Haiku 4.5 | `claude-haiku-4-5-20251001` | **200K** | $1 | $5 |
+| Tier | Model ID |
+|---|---|
+| Opus 5 | `claude-opus-5` |
+| Sonnet 5 | `claude-sonnet-5` |
 
-**Haiku 4.5 has one-fifth the context of every other tier.** Nothing else in this pipeline runs
-below 1M, so this is the only tier where a brief plus its file set can overflow. The four factors
-below score *difficulty*, never *size in tokens* — a trivially simple edit inside a very large file
-scores 1-3 and still will not fit. See the task-level gate below.
-
-**`claude-haiku-4-5-20251001` is the Claude Code harness ID.** The Claude API's own model table
-names this model `claude-haiku-4-5` and says never to append date suffixes. Both are real; they
-describe different surfaces. These skills dispatch through the harness, so the dated form is the
-correct one here — do not "fix" it to the API form, and do not use the harness form in API code.
-
-**Fable 5.1 (`claude-fable-5-1`, $10/$50) is deliberately not used.** It is the most capable model
-available and twice Opus 5's price. Opus 5 is this pipeline's ceiling by choice, not by oversight:
-nothing in planning or execution has yet been shown to fail at Opus 5 in a way Fable 5.1 would fix.
-Revisit only with evidence of a specific Opus 5 failure, never as a default upgrade.
-
-**Do not invent dispatch parameters.** `effort`, `thinking`, and per-request budgets are Claude API
-request fields; whether the harness's dispatch tool exposes any of them is **unverified**. Never
-write an instruction telling a skill to pass a parameter that has not been confirmed to exist on the
-dispatch surface — a fabricated parameter is silently dropped and reads as authoritative to the next
-session. Control cost through what is verifiable: which tier is dispatched, how tightly the brief is
-scoped, and how much context it carries.
+**Fable 5.1 (`claude-fable-5-1`) is deliberately not used.** It is the most capable model available
+and the most expensive. Opus 5 is this pipeline's ceiling by choice, not by oversight: nothing in
+planning or execution has yet been shown to fail at Opus 5 in a way Fable 5.1 would fix. Revisit
+only with evidence of a specific Opus 5 failure, never as a default upgrade.
 
 ---
 
@@ -98,10 +85,10 @@ understood.
 
 Never round a factor down to keep the total low, Ambiguity least of all — that just means the
 question wasn't asked yet. The same conflict of interest applies to all four: the model scoring its
-own task has an incentive to under-score whichever factor would trigger a model-switch or a
-subagent cap it would rather avoid. When genuinely uncertain between two adjacent values for any
-factor, round up. Each calling skill already has its own hook for resolving open questions before
-scoring, so don't duplicate it here, just don't skip it:
+own task has an incentive to under-score whichever factor would trigger a model-switch it would
+rather avoid. When genuinely uncertain between two adjacent values for any factor, round up. Each
+calling skill already has its own hook for resolving open questions before scoring, so don't
+duplicate it here, just don't skip it:
 
 - `plan-feature`'s ingestion step already has the empty-ticket rule and the vague-description rule
   — satisfy those before scoring, not instead of scoring.
@@ -146,37 +133,17 @@ proceed anyway, note in the plan that it was designed below the required tier.
 ## Task-level use (execute-plan, at decompose)
 
 Score each atomic task against its own brief (not the whole milestone), using the same four
-factors. This *is* the mechanical-vs-judgment classification in §3 — score first, then dispatch
-accordingly:
+factors. `execute-plan` never dispatches — it implements and verifies every task itself, in the
+session — so the score feeds two things instead of a dispatch tier:
 
-| Score | Dispatch |
+| Score | What the score means |
 |---|---|
-| 1-3 | `claude-haiku-4-5-20251001`. |
-| 4-7 | `claude-sonnet-5` as primary implementer; may optionally peel off strictly mechanical sub-pieces to `claude-haiku-4-5-20251001` subagents run alongside it. |
-| 8-10 | The controller (Opus 5) is the primary implementer — no capped subagent owns a task this hard. It still uses the normal Haiku/Sonnet subagent scaling for any genuinely separable mechanical portions; leading the hard part directly doesn't mean going solo on all of it. |
+| 1-3 | Mechanical; verify with a normal-pace read (§3's verification pass, unchanged in depth). |
+| 4-7 | Real judgment involved; verify a little more slowly, re-deriving intent from the brief before checking the diff. |
+| 8-10 | This is exactly the difficulty band the pipeline used to reserve for the controller alone, never a capped subagent — before implementing it, tell the user the score and ask whether the session should be running Opus 5 tier, the same gate `plan-feature` applies at design time. |
 
 Record the score on the task's ledger line (`score=<n>`) so a resumed run and any later review can
-see why a task was dispatched where it was, without re-deriving the judgment call.
-
-**Context gate — check before every Haiku dispatch.** The score says how hard the task is, not how
-much text it takes to do. Before dispatching a 1-3 task to Haiku, estimate the brief plus every file
-the task must read against Haiku's **200K** window (see Model reference above). If it does not
-comfortably fit, dispatch `claude-sonnet-5` instead and note `ctx=overflow` on the ledger line — the
-score is unchanged, only the tier moves. A mechanical rename inside a 6,000-line file is the normal
-case here, not an exotic one.
-
-**The tiers are a cost cascade — judge them on cost per *completed task*, not per dispatch.** Haiku
-is half Sonnet's price per token, which is a narrower margin than it looks once a failed attempt is
-priced in: a 1-3 task that fails at Haiku and is retried at Sonnet with findings (§4's ladder) has
-already cost two dispatches plus the controller's adjudication to save half the tokens on the first
-one. Two further costs are easy to miss — prompt caches are **model-scoped**, so each tier a
-milestone touches is a separate cache namespace that re-pays for the same plan and map context, and
-every dispatch pays its own briefing overhead regardless of tier.
-
-Consequence: **score down to Haiku only when the task is genuinely mechanical and likely to land
-first try.** When a 1-3 is borderline, or the same brief has already failed once at any tier, send it
-to Sonnet. The cheapest run is the one that does not repeat itself, and a same-tier retry buys
-nothing but another bill.
+see how much scrutiny a task got without re-deriving the judgment call.
 
 ## Grading-level use (test-feature, kevin)
 
@@ -197,6 +164,18 @@ tier before doing the substantive grading; if it falls short, tell the user and 
 (`/model`), waiting rather than proceeding by default — the `--e2e` Opus floor past ~5 domains is a
 hard requirement, not a recommendation the model can silently skip. If they explicitly choose to
 proceed anyway, note it in the report header, the same way `plan-feature` notes a below-tier design.
+
+**Split-execution alternative for the >~5-domain row.** The Opus floor attaches to the *aggregate*
+judgment call — cross-referencing findings from many domains into one cross-domain journey and one
+consolidated verdict (kevin §6.3-6.5) — not to covering many domains at all. A session may instead
+run each domain's coverage (kevin §6.2: the flow-by-flow persona pass and that domain's own UI/UX
+rating) as a separate pass, scored under the flat Sonnet-5 floor the row above already gives
+`kevin --domain`, one domain at a time. Only the cross-domain journey and the final consolidation
+into one report plus `ONBOARDING.md` still require Opus 5 — now over a much smaller judgment call
+than grading every domain from scratch would be. This does not lower the bar: the synthesis step is
+still gated at Opus 5 exactly as before, and running *that* step below Opus 5 is exactly the "just
+this once" the paragraph above forbids. See kevin's §0b and §6.1 for the mechanics of offering and
+running this.
 
 Neither skill dispatches subagents at any tier — this gate is purely about the interactive
 session's own model, identical in spirit to the feature-level gate above.

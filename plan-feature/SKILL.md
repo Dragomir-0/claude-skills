@@ -94,13 +94,14 @@ satisfied, not worked around — score it using the feature-level rubric in
 contextualisation.
 
 The score fixes which model this design must run under. `plan-feature` never dispatches
-subagents at any score — this gate is purely about the interactive session's own model:
+subagents at any score — this gate is purely about the interactive session's own model. Look the
+required tier up deterministically rather than re-reading the table by eye:
 
-| Score | Required model |
-|---|---|
-| 1-7 | Sonnet 5, no subagents |
-| 8-10 | Opus 5, no subagents |
+```bash
+node ~/.claude/skills/tooling/cli.mjs complexity-scoring.modelForGate '["featureLevel", <score>]'
+```
 
+Returns `{"model": "sonnet5" | "opus5", "note": "no subagents"}` (1-7 → Sonnet 5, 8-10 → Opus 5).
 Check the required tier against the model actually powering this session (stated in your own
 system prompt). If the session already meets or exceeds it, continue. If not, tell the user the
 score and that this design needs to run on the required model — ask them to switch (`/model`)
@@ -275,8 +276,12 @@ Include the ADO work item ID and title when there is one.
 Present the three tiers in a compact comparison, recommend the best-value tier first, then use
 `AskUserQuestion` to let the user choose. This happens **inside plan mode**, alongside the usual
 exploration and design work — it's the "clarify approaches" use of `AskUserQuestion` plan mode
-expects, not a substitute for the approval step below. Record the choice in the plan —
-`/execute-plan` reads it to know which tier's milestones to execute.
+expects, not a substitute for the approval step below. Record the choice by appending ` (chosen)`
+to that tier's own `## Tier <N>` heading — e.g. `## Tier 2 — Localized Optimization (chosen)` —
+the literal, parseable marker `/execute-plan` reads to know which tier's milestones to execute, and
+`/cleanup-crew`'s plan-pruning step (`tooling/lib/plan-pruning.mjs`) reads back later to know which
+milestones a finished plan needs `APPROVED` lines for before it's safe to delete. Nothing else in
+the plan marks the choice — don't also write a separate "chosen tier" line elsewhere.
 
 ### Approval and write
 
