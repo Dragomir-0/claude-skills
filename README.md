@@ -1,9 +1,10 @@
 # Claude Code skills — the feature pipeline
 
-My personal Claude Code skills: a six-skill pipeline that takes a feature from "I have an idea"
-to "it's on a branch, reviewed and pushed" — with a UAT persona that can run standalone at any
-point. Each stage is a slash command, writes exactly one kind of artifact, and hard-pauses for
-me at the decisions that are mine to make.
+My personal Claude Code skills. The core of it is a six-skill pipeline that takes a feature from
+"I have an idea" to "it's on a branch, reviewed and pushed" — with a UAT persona that can run
+standalone at any point. Each stage is a slash command, writes exactly one kind of artifact, and
+hard-pauses for me at the decisions that are mine to make. One further skill,
+[`ui-ux-pro-max`](#also-here--ui-ux-pro-max), sits outside that pipeline.
 
 ```
 /map-codebase  →  /plan-feature  →  /execute-plan  →  /test-feature  →  /cleanup-crew
@@ -32,6 +33,21 @@ design rigor. **Neither shared file is optional** — the skills reference them 
 
 ---
 
+## Also here — `ui-ux-pro-max`
+
+Not part of the pipeline and not a slash command: a design-intelligence skill that the model
+loads on relevance when a task involves interfaces — layout, type, colour, charts,
+accessibility, or stack-specific UI. It is self-contained (`SKILL.md`, a `data/` corpus of CSV
+and JSON reference tables, and four Python helpers under `scripts/`) and shares nothing with
+`_shared/` or `tooling/`, so it neither needs the pipeline nor is needed by it.
+
+It lives here because it is a hand-maintained skill in `~/.claude/skills/` rather than a
+marketplace plugin, so it is mine to version and nothing else would back it up.
+
+`scripts/__pycache__/` is gitignored — the `.pyc` files are build output and regenerate on use.
+
+---
+
 ## Install on a new machine
 
 Skills are plain files; nothing syncs through the Claude account. Clone this repo *as* the
@@ -47,6 +63,7 @@ copy instead:
 ```bash
 git clone https://github.com/Steelwool9925/claude-skills.git /tmp/claude-skills
 cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin} ~/.claude/skills/
+cp -r /tmp/claude-skills/ui-ux-pro-max ~/.claude/skills/   # optional — standalone, not pipeline
 cp -r /tmp/claude-skills/tooling ~/.claude/skills/
 mkdir -p ~/.claude/skills/_shared
 cp /tmp/claude-skills/_shared/{pipeline-contract.md,complexity-scoring.md} ~/.claude/skills/_shared/
@@ -57,8 +74,8 @@ shell out to `node ~/.claude/skills/tooling/cli.mjs` at that fixed path — see 
 
 On Windows the path is the same: `C:\Users\<you>\.claude\skills\`.
 
-Restart Claude Code (or `/exit` and relaunch). Confirm with `/help` — the six commands should
-be listed. The end state you want:
+Restart Claude Code (or `/exit` and relaunch). Confirm with `/help` — the six pipeline commands
+should be listed (`ui-ux-pro-max` has no slash command; it loads on relevance). The end state you want:
 
 ```
 ~/.claude/skills/
@@ -70,7 +87,8 @@ be listed. The end state you want:
 ├── map-codebase/         SKILL.md + map.mjs + 3 test scripts
 ├── plan-feature/SKILL.md
 ├── test-feature/SKILL.md
-└── tooling/              cli.mjs + lib/ + config/ — see tooling/README.md
+├── tooling/              cli.mjs + lib/ + config/ — see tooling/README.md
+└── ui-ux-pro-max/        SKILL.md + data/ + scripts/ — standalone, not part of the pipeline
 ```
 
 ---
