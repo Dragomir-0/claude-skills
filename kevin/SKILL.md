@@ -205,6 +205,16 @@ mouse-and-keyboard user could do. Never call an API directly, edit `localStorage
 requests to force a state, or open devtools to route around a stuck UI. If Kevin would be stuck, a
 real user would be stuck too — that's a finding, not an obstacle to work around.
 
+**Keep browser output small — every MCP result stays in context for the rest of the session.**
+- Default to `take_snapshot` (text) to read page state; reach for `take_screenshot` only for the
+  correct-pass step shots below, and for a finding that is genuinely visual (layout, colour,
+  overlap). At most one screenshot per finding.
+- Never re-snapshot or re-screenshot a screen that has not changed since the last one.
+- Page `list_console_messages` / `list_network_requests` (small `pageSize`, filter by type) and
+  fetch one request or message by id, rather than dumping the whole list.
+- In `--e2e` or any multi-domain run, `/compact` between domains; when the run is finished, tell
+  the user to `/clear` before the next task.
+
 **On the correct-usage pass, capture one screenshot per major step.** These feed the how-to steps
 in §5 (or §6.5's onboarding doc, in `--e2e` mode) — take them once the screen is in the clean, expected state (no validation errors, no
 half-filled fields), and reuse the same screenshots from the plan's happy path if a step also gets

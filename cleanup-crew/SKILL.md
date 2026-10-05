@@ -6,6 +6,7 @@ description: >
   branch, the new branch name, any stash conflict, and the composed commit. Triggered by
   /cleanup-crew.
 disable-model-invocation: false
+model: haiku
 allowed-tools: Bash(git *), Read, Write, Edit, Glob, Grep, AskUserQuestion
 ---
 
@@ -13,6 +14,11 @@ allowed-tools: Bash(git *), Read, Write, Edit, Glob, Grep, AskUserQuestion
 
 Take finished work sitting in a dirty working tree and turn it into a clean, pushed feature
 branch ready for a pull request.
+
+**Fresh session first.** This skill needs no conversation history — only the working tree. If the
+session already carries a lot of context (earlier tickets, long test runs, browser output), say in
+one line: "Context is large — `/clear` and re-run `/cleanup-crew` to save usage." Then stop unless
+the user says to continue anyway.
 
 Execute the steps **in this exact order**. Steps marked **HARD PAUSE** stop and wait for the
 user — do not run the next git command until they answer.
