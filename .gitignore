@@ -1,2 +1,8 @@
 __pycache__/
 *.pyc
+
+# Claude Code pipeline artifacts
+.claude/maps/
+.claude/plans/
+.claude/reports/
+.claude/roadmap.md
