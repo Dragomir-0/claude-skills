@@ -21,6 +21,7 @@ hard-pauses for me at the decisions that are mine to make. One further skill,
 | **`/test-feature`** | Grades the implemented feature against its plan at a chosen rigour (`--optimism 1-5`), measuring real coverage at level 3+, tracing the feature end to end with systematic debugging, and checking completeness, security, deployment, pipeline and efficiency. Never spawns subagents — the whole run stays in one evidence trail. Never touches source. | a test report |
 | **`/kevin`** | Plays a careless first-time user through the live frontend — a feature, a whole map domain, or the entire project — deliberately mistyping and misclicking, and reports every bug, crash and confusing moment. Reads the plan/map, never source. | a bug report (+ onboarding doc) |
 | **`/cleanup-crew`** | Stashes, branches off an up-to-date base, restores the work, refreshes docs, and drives a reviewed conventional commit and push ready for a PR. | a branch + commit |
+| **`/haiku-split`** | Splits any skill's steps into Haiku-sized tasks and runs them as a chained, context-capped Haiku Workflow with handoff files. Launches only after you confirm each run; judgment and approval steps stay with the main session. | a run folder (task spec + workflow script + notes) |
 
 `_shared/pipeline-contract.md` holds the artifact paths, repo resolution, `<Name>` derivation, cost
 discipline and the no-subagent policy that these skills read, and
@@ -62,7 +63,7 @@ copy instead:
 
 ```bash
 git clone https://github.com/Steelwool9925/claude-skills.git /tmp/claude-skills
-cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin} ~/.claude/skills/
+cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin,haiku-split} ~/.claude/skills/
 cp -r /tmp/claude-skills/ui-ux-pro-max ~/.claude/skills/   # optional — standalone, not pipeline
 cp -r /tmp/claude-skills/tooling ~/.claude/skills/
 mkdir -p ~/.claude/skills/_shared
@@ -116,7 +117,7 @@ Add the `anthropics/claude-plugins-official` marketplace, then install **superpo
 
 ### Note — no subagents, by design
 
-None of these skills dispatch subagents. `/execute-plan`, `/kevin` and `/map-codebase` implement,
+None of these skills dispatch subagents except `/haiku-split`, which launches Haiku segments only after you confirm each run. `/execute-plan`, `/kevin` and `/map-codebase` implement,
 verify, draft and publish entirely in the calling session — there is nothing to opt into and no
 `Workflow`/dispatch tool dependency to install. The only way a subagent ever runs is you asking for
 one yourself, ad hoc, in the moment, gated by your own harness permission mode or tool-allowlist —

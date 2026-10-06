@@ -1,0 +1,95 @@
+export const meta = {
+  name: 'haiku-split-run',
+  description: 'Run haiku-split tasks as chained Haiku segments under the context-barrier rules',
+  phases: [{ title: 'Segments', detail: 'sequential Haiku segments, one handoff file per segment' }],
+}
+
+const HAIKU = 'claude-haiku-4-5-20251001'
+const LIMIT = {{LIMIT}}
+const MAX_SEGMENTS = {{MAX_SEGMENTS}}
+const AREA = {{AREA}}
+const RUN_DIR = {{RUN_DIR}}
+const PARAMS = {{PARAMS}}
+const HARD_RULES = {{HARD_RULES}}
+const START = (args && args.startSegment) || 1
+
+const SEGMENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['handoff', 'done', 'left_area', 'blocked'] },
+    startCounter: { type: 'number' },
+    endCounter: { type: 'number' },
+    handoffPath: { type: 'string' },
+    findings: { type: 'array', items: { type: 'string' } },
+    avenuesCovered: { type: 'array', items: { type: 'string' } },
+    avenuesRemaining: { type: 'array', items: { type: 'string' } },
+    summary: { type: 'string' },
+  },
+  required: ['status', 'startCounter', 'endCounter', 'handoffPath', 'findings', 'avenuesCovered', 'avenuesRemaining', 'summary'],
+}
+
+function segmentPrompt(n) {
+  const prev = `${RUN_DIR}/handoff-${n - 1}.md`
+  const mine = `${RUN_DIR}/handoff-${n}.md`
+  return `You are segment ${n} of a chained Haiku workflow. AREA=${AREA}.
+You cannot ask the user anything. If you need a decision or a parameter that is not pre-answered below, return status "blocked" and put the question in summary.
+
+HARD RULES (every segment):
+${HARD_RULES}
+
+PRE-ANSWERED PARAMETERS:
+${PARAMS}
+
+FILES (all under ${RUN_DIR}):
+- TASKS.md: the full ordered task list.
+- ${prev}: READ THIS FIRST. It says what is done, what remains and the exact state. (handoff-0.md is the seed written before the run.)
+- notes.md: shared findings. Read it. Append each finding to it AS YOU GO, not only at the end.
+- progress.log: read it. Append one line after EVERY action.
+
+WHAT TO DO:
+Work the tasks in TASKS.md in order. A task is already done if progress.log has a line containing "DONE <id>" or "DONE-MAIN <id>" for it. Do not repeat covered work.
+For each task: do its Instructions exactly, write its Outputs, then run its Done-check. If the check passes, append "... | DONE <id> - <result>". If it fails, append "... | FAILED <id> - <why>" and add a finding.
+If the next task is a P (pause) or M (main) block, or depends on a FAILED task, stop and return status "blocked" with the reason in summary.
+If you are about to do something outside AREA=${AREA}, do not do it: append "... | stopped - leaving area", and return status "left_area".
+When every task is done or marked DONE-MAIN, return status "done".
+
+PROGRESS LOG LINE FORMAT (append with a shell redirect, one line each):
+AREA=${AREA} | seg ${n} | used=<N> | <action and result>
+Also write "HANDOFF ..." when you hand off and "DONE ..." when the whole run is done.
+
+CONTEXT BARRIER (hard):
+1. Your FIRST "<total_tokens>N tokens left" value in this conversation is startCounter. After EVERY tool call, compute used = startCounter - current N.
+2. LIMIT is ${LIMIT} tokens. When used >= ${LIMIT}: finish only the action in flight, write ${mine}, append a HANDOFF line, return status "handoff".
+3. ${mine} must hold these headings: Done, Remains, Current state (exact file/page/dialog state), Gotchas, Side effects, Findings so far.
+4. If you cannot see any "<total_tokens>" value, return status "blocked" with summary "token counter not visible" before doing any task.
+
+SMALL READS: write snapshots or long output to a file and grep it. No screenshots unless the task needs one; keep at most 2-4 clean ones.
+
+RETURN (structured): status (handoff | done | left_area | blocked), startCounter, endCounter, handoffPath (${mine}), findings[], avenuesCovered[] (task ids done), avenuesRemaining[] (task ids not done), summary.`
+}
+
+phase('Segments')
+const results = []
+let last = null
+for (let n = START; n < START + MAX_SEGMENTS; n++) {
+  const r = await agent(segmentPrompt(n), {
+    label: `segment ${n}`,
+    phase: 'Segments',
+    model: HAIKU,
+    schema: SEGMENT_SCHEMA,
+  })
+  results.push(r)
+  if (r === null) {
+    log(`segment ${n} -> null | stopped`)
+    last = { status: 'null' }
+    break
+  }
+  const used = (r.startCounter || 0) - (r.endCounter || 0)
+  log(`segment ${n} -> ${r.status} | used ~${Math.round(used / 1000)}k | ${r.findings.length} findings`)
+  last = r
+  if (r.status !== 'handoff') break
+}
+if (last && last.status === 'handoff') {
+  log(`MAX_SEGMENTS (${MAX_SEGMENTS}) reached. avenuesRemaining: ${JSON.stringify(last.avenuesRemaining)}`)
+}
+return { segments: results.length, last, results }
