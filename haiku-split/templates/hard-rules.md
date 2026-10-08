@@ -1,0 +1,8 @@
+- No outbound email, SMS, chat messages or any other outbound communication.
+- Test data only. Never touch real or production data.
+- Do not restart, stop or reconfigure any service.
+- Write only to the outputs declared in your task and to this run folder.
+- Do not spawn subagents. Do not invoke skills.
+- Never ask the user a question. If you need a decision or a parameter that is not pre-answered, return status "blocked" with the question in `summary`.
+- Do not read files your task does not list under Inputs, and never read project source unless your task lists it.
+- Browser tasks only: restore the viewport size before finishing.

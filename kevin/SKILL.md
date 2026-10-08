@@ -24,6 +24,11 @@ file. Reading source to "understand the feature better" is exactly the shortcut 
 user doesn't have, and it's off-limits here for the same reason `test-feature` can't skip an
 evaluation vector: it would produce evidence about a persona this skill isn't running.
 
+Checking what the feature touches (§3c) works the same way §6.3's cross-domain journey already
+does — via `map.mjs edges` against the codebase map, never the diff or File Impact Manifest. Map
+edges describe structure (which domains connect), not implementation; reading them isn't reading
+source.
+
 Usage:
   `/kevin --plan <path to FEATURE_PLAN_<Name>.md> [--url <base-url>]` — single feature, plan-driven
   `/kevin --domain <name> [--url <base-url>]` — single map domain, no plan needed
@@ -36,8 +41,9 @@ Artifact paths, `<Name>` derivation and repo resolution come from
 ## 0 — Gate
 
 **Pick the mode from how kevin was invoked**, then jump to the matching lookup below. §1
-(get the app running) and §2 (persona) apply to every mode; §3–§5 are the single-feature/domain
-report format, replaced by §6 for `--e2e`.
+(get the app running), §2 (persona) and §2b (every avenue) apply to every mode; §3–§5 (including
+§3c, interacting features) are the single-feature/domain report format, replaced by §6 for `--e2e`
+(§6.3 runs the same interacting-feature check, across every confirmed edge, for that mode).
 
 | Invocation | Lookup |
 |---|---|
@@ -199,6 +205,16 @@ mouse-and-keyboard user could do. Never call an API directly, edit `localStorage
 requests to force a state, or open devtools to route around a stuck UI. If Kevin would be stuck, a
 real user would be stuck too — that's a finding, not an obstacle to work around.
 
+**Keep browser output small — every MCP result stays in context for the rest of the session.**
+- Default to `take_snapshot` (text) to read page state; reach for `take_screenshot` only for the
+  correct-pass step shots below, and for a finding that is genuinely visual (layout, colour,
+  overlap). At most one screenshot per finding.
+- Never re-snapshot or re-screenshot a screen that has not changed since the last one.
+- Page `list_console_messages` / `list_network_requests` (small `pageSize`, filter by type) and
+  fetch one request or message by id, rather than dumping the whole list.
+- In `--e2e` or any multi-domain run, `/compact` between domains; when the run is finished, tell
+  the user to `/clear` before the next task.
+
 **On the correct-usage pass, capture one screenshot per major step.** These feed the how-to steps
 in §5 (or §6.5's onboarding doc, in `--e2e` mode) — take them once the screen is in the clean, expected state (no validation errors, no
 half-filled fields), and reuse the same screenshots from the plan's happy path if a step also gets
@@ -215,12 +231,35 @@ explain *why* the button did nothing. Never use them to figure out *how* to oper
 | "This step obviously has no wrong way to do it" | Try anyway once — empty submit, double-click, back button. Only skip after actually trying. |
 | "It's clearly a network issue, not worth a full repro" | Record it with repro steps anyway — `/execute-plan` needs steps, not a guess at the cause. |
 
+## 2b — Every avenue (all modes)
+
+One correct route plus one mistake per step isn't full coverage if the step actually offers more
+than one legitimate way through it. Before calling a step covered:
+
+- Where a step has more than one legitimate way to complete it — a menu action and its keyboard
+  shortcut, a single-item form and a bulk-upload equivalent, "save as draft" vs "submit" — exercise
+  each route at least once, not just whichever one comes first.
+- Where the acceptance criteria describe multiple valid input types or user states (e.g. "accepts
+  CSV or JSON", "works for both new and returning users"), cover each variant, not just one
+  representative case.
+- This is in addition to §2's deliberate-mistake pass, not a replacement for it — a step still gets
+  a wrong attempt *and* every legitimate route tried correctly.
+
+Skip this only when a step genuinely has just one way to do it — never because trying every avenue
+is slower than trying one.
+
 ## 3 — Coverage (`--plan` and `--domain` modes)
 
 Work through every acceptance criterion and milestone in the plan's selected tier (or, in
-`--domain` mode, every `## Flow:` read in §0's Map lookup), applying the persona in §2 to each.
-Note in the report whether it was exercised, partially exercised (the flow broke before reaching
-it), or unreachable.
+`--domain` mode, every `## Flow:` read in §0's Map lookup), applying the persona in §2 and the
+every-avenue coverage in §2b to each. Note in the report whether it was exercised, partially
+exercised (the flow broke before reaching it), or unreachable.
+
+**Also run the whole thing start to finish.** Covering each criterion individually isn't the same
+as covering the feature — on the correct-usage pass, complete the entire flow beginning to end in
+one continuous run, exactly as a real user finishing the whole feature would, so that hand-offs
+between steps (state carried from one screen to the next, a value entered early that's used later)
+get exercised too, not just each step in isolation.
 
 ## 3b — UI/UX rating (`--plan` and `--domain` modes)
 
@@ -245,6 +284,28 @@ accessibility guideline, contradicts the plan's Design Direction — gets its ow
 entry in §4's Correction Plan. A subjective style preference with no concrete violation behind it
 stays in this section only; it does not become a Correction Plan entry.
 
+## 3c — Interacting features (`--plan` and `--domain` modes)
+
+A feature rarely stands alone in what it touches. Before closing out the report, confirm the ground
+around the tested feature still holds up — not just the feature itself:
+
+- Run `map.mjs edges` (the same tool §6.3 uses) for candidate couplings between the tested
+  domain/flow and any other domain — shared auth, a sequential business process, shared
+  data/queue/route names.
+- **Confirm each candidate is real before treating it as in scope** — per `pipeline-contract.md`,
+  edges are candidates, not conclusions, and the same string can appear in two domains by
+  coincidence.
+- For **every** confirmed edge (not just one), drive that other domain's affected flow through the
+  UI far enough to confirm it still completes correctly. This is a regression check, not a fresh
+  persona run of that domain — a correct-usage-only pass is enough, §2b's every-avenue and §2's
+  mistake pass aren't required there.
+- Record each one under a **Touched Features** line in the report's Coverage section: which
+  interacting flow was checked, and whether it still works.
+- A regression found here — the tested feature works, but something it touches now doesn't — is a
+  **Critical** issue in §4, same severity rules as any other finding.
+- No confirmed edges at all → say so ("no interacting domains found") rather than skipping the
+  section silently.
+
 ## 4 — Output (`--plan` and `--domain` modes)
 
 Write `.claude/reports/KEVIN_REPORT_<Name>.md`:
@@ -258,6 +319,9 @@ Plan: <path, or "none — sourced from map files (<paths>)" per §0's Map lookup
 
 ## Coverage
 <checklist of acceptance criteria / milestones — exercised / partial / unreachable, and why>
+
+## Touched Features
+<per confirmed map edge: interacting domain/flow checked, and whether it still works — or "no interacting domains found">
 
 ## Issues
 1. **[Critical|Confusing|Minor]** <title>
@@ -320,8 +384,8 @@ plan's title/acceptance criteria, the base64-encoded screenshots per step, and t
 
 ## 6 — End-to-end mode (`--e2e`)
 
-Replaces §3–§5 for this invocation. §1 (get the app running) and §2 (persona) still apply,
-applied per-flow below.
+Replaces §3–§5 for this invocation. §1 (get the app running), §2 (persona) and §2b (every avenue)
+still apply, applied per-flow below.
 
 ### 6.1 — Cost checkpoint (every run, before touching the app)
 
@@ -351,8 +415,9 @@ applied per-flow below.
 
 ### 6.2 — Per-domain coverage
 
-Apply §2's persona to every `## Flow:` in every domain the index lists — same mistake-then-correct
-pattern per step as single-feature mode, same exercised/partial/unreachable tracking as §3. Rate
+Apply §2's persona and §2b's every-avenue coverage to every `## Flow:` in every domain the index
+lists — same mistake-then-correct pattern per step as single-feature mode, same
+exercised/partial/unreachable tracking as §3. Rate
 each domain with §3b's UI/UX rating too — persona score plus the `ui-ux-pro-max` expert critique
 against that domain's clean screenshots. `--e2e` has no single plan behind any one domain, so the
 Design Direction check is always "n/a" here — never invented.
@@ -367,10 +432,11 @@ forward to §6.3-6.5 rather than re-deriving them once the session switches to O
 Run `map.mjs edges` for candidate couplings between domains (shared auth, a sequential business
 process, shared queue/topic or route names). **Confirm a candidate is real before building a
 journey on it** — per `pipeline-contract.md`, edges are candidates, not conclusions, and the same
-string can appear in two domains by coincidence. Pick at least one confirmed edge that a real
-user's session would actually cross, drive it start to finish through the UI, and apply §2's
-persona at each step exactly as any other flow. A candidate that doesn't hold up gets said so in
-the report, not a journey built on it anyway.
+string can appear in two domains by coincidence. Cover **every** confirmed edge a real user's
+session would actually cross (not just one — the same every-avenue standard §2b sets within a
+single feature applies across domains here too), drive each start to finish through the UI, and
+apply §2's persona at each step exactly as any other flow. A candidate that doesn't hold up gets
+said so in the report, not a journey built on it anyway.
 
 ### 6.4 — Report
 
@@ -393,7 +459,7 @@ URL: <base-url>   Generated: <ISO date>
 ...
 
 ## Cross-domain journey: <name>
-<same Coverage + Issues structure, for the chained journey — or "none confirmed" and why>
+<same Coverage + Issues structure, for the chained journey — repeat this section once per confirmed edge, or write "none confirmed" and why if none held up>
 
 ## Correction Plan
 1. [repo] [domain] <atomic fix — area if inferable, what, why>
@@ -465,8 +531,6 @@ ready — rather than trying to hold every domain's screenshots in context at on
   still applies to that step even after per-domain coverage ran cheaper. Equally, running §6.2's
   per-domain coverage under Opus 5 when split execution already qualifies each pass for Sonnet 5's
   flat `--domain` floor is needless spend the other way.
-- Building a §6.3 cross-domain journey on an edge that turns out coincidental, without confirming
-  it first.
 - Writing `ONBOARDING.md` from the Issues section or Correction Plan instead of each domain's
   functional description.
 - Publishing a fresh Artifact URL for `ONBOARDING.md` every run instead of reading the existing
@@ -479,6 +543,14 @@ ready — rather than trying to hold every domain's screenshots in context at on
   where there's no plan at all — mark it "n/a," don't guess one up.
 - Letting a subjective style preference from the expert critique become a Correction Plan entry —
   only a concrete violation (accessibility guideline, Design Direction mismatch) earns one.
+- Treating one legitimate route through a step as full coverage when the step actually offers more
+  than one (a shortcut, a bulk equivalent, an alternate valid input) — §2b requires trying each.
+- Grading each acceptance criterion in isolation and never running the complete flow start to
+  finish in one continuous pass.
+- Skipping §3c's interacting-features check, or stopping at the first confirmed edge instead of
+  covering every one — same for §6.3's cross-domain journey in `--e2e` mode.
+- Building §3c's or §6.3's interaction check on a `map.mjs edges` candidate without confirming it's
+  a real coupling first.
 
 ## Next step
 

@@ -6,7 +6,7 @@ My personal Claude Code setup: a feature pipeline of slash-command skills plus b
 
 ### Skills (slash commands)
 
-A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a branch, reviewed and pushed" — with a UAT persona that can run standalone at any point. Each stage is a slash command, writes exactly one kind of artifact, and hard-pauses for decisions that are yours to make.
+A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a branch, reviewed and pushed" — with a UAT persona that can run standalone at any point. Each stage is a slash command, writes exactly one kind of artifact, and hard-pauses for decisions that are yours to make. `/haiku-split` is a standalone utility alongside it, and one further skill, [`ui-ux-pro-max`](#also-here--ui-ux-pro-max), sits outside the pipeline entirely.
 
 ```
 /map-codebase  →  /plan-feature  →  /execute-plan  →  /test-feature  →  /document-changes  →  /cleanup-crew
@@ -20,18 +20,11 @@ A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a 
 | **`/map-codebase`** | Builds high-signal architecture maps so later sessions understand end-to-end feature flows without reading source. Gates the session's own model (Sonnet 5 floor) on a full build or `--update`; `--verify` is a zero-token drift check with no model floor. | architecture maps |
 | **`/plan-feature`** | Turns an Azure DevOps ticket **or** a written description into a three-tier implementation plan with File Impact Manifests, scored effort, milestones and hard pauses. Scores feature complexity and gates the session's own model (Sonnet vs Opus). Never touches source. | the plan file |
 | **`/execute-plan`** | Executes an approved plan milestone by milestone: decomposes into atomic tasks, scores each one, implements and verifies every task itself in the current session under a hard token ceiling, re-checks regressions, and stops at each milestone for me to test. `--roadmap` loops build/test-feature/kevin across every active roadmap item. | source + a ledger |
-| **`/test-feature`** | Grades the implemented feature against its plan at a chosen rigour (`--optimism 1-5`), measuring real coverage at level 3+, and checking completeness, security, deployment, pipeline and efficiency. Never spawns subagents — the whole run stays in one evidence trail. Never touches source. | a test report |
+| **`/test-feature`** | Grades the implemented feature against its plan at a chosen rigour (`--optimism 1-5`), measuring real coverage at level 3+, tracing the feature end to end with systematic debugging, and checking completeness, security, deployment, pipeline and efficiency. Never spawns subagents — the whole run stays in one evidence trail. Never touches source. | a test report |
 | **`/kevin`** | Plays a careless first-time user through the live frontend — a feature, a whole map domain, or the entire project — deliberately mistyping and misclicking, and reports every bug, crash and confusing moment. Reads the plan/map, never source. | a bug report (+ onboarding doc) |
 | **`/cleanup-crew`** | Stashes, branches off an up-to-date base, restores the work, refreshes docs, and drives a reviewed conventional commit and push ready for a PR. | a branch + commit |
 | **`/document-changes`** | Analyzes git diffs to generate comprehensive change documentation with ticket context, architecture impact, and design decisions. Maps files to layers, documents the "why" behind changes, and produces structured markdown explaining what changed and how it affects the codebase. | change docs |
-
-### Hooks (background infrastructure)
-
-Optional background systems that run automatically, not on command:
-
-| Hook | What it does |
-|---|---|
-| **`context-threshold-hook`** | Monitors transcript size and automatically enforces context clearing when ~150k tokens are reached. Writes a handoff document before clearing, then resumes from it on the next session. Prevents context-window exhaustion in long-running sessions. |
+| **`/haiku-split`** | Splits any skill's steps into Haiku-sized tasks and runs them as a chained, context-capped Haiku Workflow with handoff files. Launches only after you confirm each run; judgment and approval steps stay with the main session. | a run folder (task spec + workflow script + notes) |
 
 `_shared/pipeline-contract.md` holds the artifact paths, repo resolution, `<Name>` derivation, cost
 discipline and the no-subagent policy that these skills read, and
@@ -41,6 +34,29 @@ uncertainty; 1-10) that `plan-feature` and `execute-plan` score against — `tes
 score (read from the plan header) to set their own minimum model tier, so grading rigor tracks
 design rigor. **Neither shared file is optional** — the skills reference them by absolute path at
 `~/.claude/skills/_shared/`.
+
+### Hooks (background infrastructure)
+
+Optional background systems that run automatically, not on command:
+
+| Hook | What it does |
+|---|---|
+| **`context-threshold-hook`** | Monitors transcript size and automatically enforces context clearing when ~150k tokens are reached. Writes a handoff document before clearing, then resumes from it on the next session. Prevents context-window exhaustion in long-running sessions. |
+
+---
+
+## Also here — `ui-ux-pro-max`
+
+Not part of the pipeline and not a slash command: a design-intelligence skill that the model
+loads on relevance when a task involves interfaces — layout, type, colour, charts,
+accessibility, or stack-specific UI. It is self-contained (`SKILL.md`, a `data/` corpus of CSV
+and JSON reference tables, and four Python helpers under `scripts/`) and shares nothing with
+`_shared/` or `tooling/`, so it neither needs the pipeline nor is needed by it.
+
+It lives here because it is a hand-maintained skill in `~/.claude/skills/` rather than a
+marketplace plugin, so it is mine to version and nothing else would back it up.
+
+`scripts/__pycache__/` is gitignored — the `.pyc` files are build output and regenerate on use.
 
 ---
 
@@ -58,7 +74,9 @@ If `~/.claude/skills` already exists and has content you want to keep, clone els
 
 ```bash
 git clone https://github.com/Steelwool9925/claude-skills.git /tmp/claude-skills
-cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin,document-changes,tooling} ~/.claude/skills/
+cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin,document-changes,haiku-split} ~/.claude/skills/
+cp -r /tmp/claude-skills/ui-ux-pro-max ~/.claude/skills/   # optional — standalone, not pipeline
+cp -r /tmp/claude-skills/tooling ~/.claude/skills/
 mkdir -p ~/.claude/skills/_shared
 cp /tmp/claude-skills/_shared/{pipeline-contract.md,complexity-scoring.md} ~/.claude/skills/_shared/
 ```
@@ -77,11 +95,13 @@ The end state you want (skills only):
 ├── cleanup-crew/SKILL.md
 ├── document-changes/SKILL.md
 ├── execute-plan/SKILL.md
+├── haiku-split/          SKILL.md + templates/ + tests/
 ├── kevin/SKILL.md
 ├── map-codebase/         SKILL.md + map.mjs + test scripts
 ├── plan-feature/SKILL.md
 ├── test-feature/SKILL.md
-└── tooling/              cli.mjs + lib/ + config/ — see tooling/README.md
+├── tooling/              cli.mjs + lib/ + config/ — see tooling/README.md
+└── ui-ux-pro-max/        SKILL.md + data/ + scripts/ — standalone, not part of the pipeline
 ```
 
 ### Step 2: Install hooks (optional)
@@ -98,7 +118,7 @@ cp ~/.claude/skills/context-threshold-hook/*.js ~/.claude/hooks/
 
 ### Step 3: Restart Claude Code
 
-Restart Claude Code (or `/exit` and relaunch). Confirm with `/help` — the seven skill commands should be listed.
+Restart Claude Code (or `/exit` and relaunch). Confirm with `/help` — the eight slash commands (the seven pipeline skills plus `/haiku-split`) should be listed. `ui-ux-pro-max` has no slash command; it loads on relevance.
 
 ---
 
@@ -125,7 +145,7 @@ Add the `anthropics/claude-plugins-official` marketplace, then install **superpo
 
 ### Note — no subagents, by design
 
-None of these skills dispatch subagents. `/execute-plan`, `/kevin` and `/map-codebase` implement,
+None of these skills dispatch subagents except `/haiku-split`, which launches Haiku segments only after you confirm each run. `/execute-plan`, `/kevin` and `/map-codebase` implement,
 verify, draft and publish entirely in the calling session — there is nothing to opt into and no
 `Workflow`/dispatch tool dependency to install. The only way a subagent ever runs is you asking for
 one yourself, ad hoc, in the moment, gated by your own harness permission mode or tool-allowlist —
