@@ -6,7 +6,7 @@ My personal Claude Code setup: a feature pipeline of slash-command skills plus b
 
 ### Skills (slash commands)
 
-A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a branch, reviewed and pushed" — with a UAT persona that can run standalone at any point. Each stage is a slash command, writes exactly one kind of artifact, and hard-pauses for decisions that are yours to make. `/haiku-split` (experimental) is a standalone utility alongside it, and one further skill, [`ui-ux-pro-max`](#also-here--ui-ux-pro-max), sits outside the pipeline entirely.
+A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a branch, reviewed and pushed" — with a UAT persona that can run standalone at any point. Each stage is a slash command, writes exactly one kind of artifact, and hard-pauses for decisions that are yours to make. `/haiku-split` (experimental) and `/generate-git-ticket` are standalone utilities alongside it, and one further skill, [`ui-ux-pro-max`](#also-here--ui-ux-pro-max), sits outside the pipeline entirely.
 
 ```
 /map-codebase  →  /plan-feature  →  /execute-plan  →  /test-feature  →  /document-changes  →  /cleanup-crew
@@ -25,6 +25,7 @@ A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a 
 | **`/cleanup-crew`** | Stashes, branches off an up-to-date base, restores the work, refreshes docs, and drives a reviewed conventional commit and push ready for a PR. | a branch + commit |
 | **`/document-changes`** | Analyzes git diffs to generate comprehensive change documentation with ticket context, architecture impact, and design decisions. Maps files to layers, documents the "why" behind changes, and produces structured markdown explaining what changed and how it affects the codebase. | change docs |
 | **`/haiku-split`** ⚠️ *experimental* | **[Experimental — see below.](#experimental-haiku-split)** Splits any skill's steps into Haiku-sized tasks and runs them as a chained, context-capped Haiku Workflow with handoff files. Launches only after you confirm each run; judgment and approval steps stay with the main session. | a run folder (task spec + workflow script + notes) |
+| **`/generate-git-ticket`** | *Standalone, outside the pipeline chain.* Turns a raw pasted change or issue (English, Afrikaans, or mixed) into a structured, platform-neutral markdown git issue body. Pick the ticket type with a flag: `--basic` (default), `--bug`, or `--feature-request`. Each is a file in `generate-git-ticket/templates/`, so a new type is just a new file ([usage and adding templates](#using-generate-git-ticket)). A short questionnaire fills in missing details, then the Afrikaans or English ticket is printed in a code block. Writes no files. | a ticket (code block) |
 
 <a id="experimental-haiku-split"></a>
 
@@ -53,6 +54,63 @@ Optional background systems that run automatically, not on command:
 | Hook | What it does |
 |---|---|
 | **`context-threshold-hook`** | Monitors transcript size and automatically enforces context clearing when ~150k tokens are reached. Writes a handoff document before clearing, then resumes from it on the next session. Prevents context-window exhaustion in long-running sessions. |
+
+---
+
+<a id="using-generate-git-ticket"></a>
+
+## Using `/generate-git-ticket`
+
+```
+/generate-git-ticket [--<template>] [raw change text]
+```
+
+The flag names the template. Leave it out and you get `basic`. Names match case-insensitively, so
+`--Bug` and `--bug` both work. If you don't paste the text with the command, the skill asks for it.
+
+| Flag | Template | Use it for | Sections |
+|---|---|---|---|
+| *(none)* or `--basic` | `templates/basic.md` | Anything general | Title, Affected system (only if stated), Reported by, Description, Acceptance Criteria |
+| `--bug` | `templates/bug.md` | Defects. Asks for steps to reproduce if the paste has none. | Title, Affected system, Reported by, Description, Steps to reproduce, Expected vs actual, Acceptance Criteria, Impact, Workaround, Investigation, Resolution |
+| `--feature-request` | `templates/feature-request.md` | New functionality or a change in behaviour | Title, Affected system, Requested by, Summary, Problem / motivation, Proposed solution, Acceptance Criteria, Out of scope |
+
+Examples:
+
+```
+/generate-git-ticket Die export knoppie doen niks op die invoices page nie
+/generate-git-ticket --bug Saving a customer throws "NullReferenceException at CustomerService.Save"
+/generate-git-ticket --feature-request Users want to export the report to CSV
+```
+
+Every run asks one round of questions:
+- **Who reported or requested it.** This is always asked, even if the paste names someone.
+- **Anything the template needs that the paste leaves out**, such as the affected system or acceptance criteria.
+- **The output language**, Afrikaans or English.
+
+The ticket then comes back as a single markdown code block, ready to paste into GitHub, GitLab,
+Azure DevOps or any other platform. It is the issue body only, with no labels, tags or assignees.
+An empty optional section is dropped rather than padded. A flag that doesn't match any template
+lists the available ones and stops.
+
+### Adding a new template
+
+1. Copy the closest existing template, for example
+   `cp generate-git-ticket/templates/basic.md generate-git-ticket/templates/<name>.md`.
+   The file name, without `.md`, becomes the flag: `spike.md` → `--spike`.
+2. Edit the copy, keeping every section below. The skill relies on each of them:
+
+   | Section | What it holds |
+   |---|---|
+   | `Purpose:` line | One line describing the template. It is shown when someone uses an unknown flag. |
+   | `## Structure` | The ticket body in a fenced `markdown` block. Placeholders go in `<angle brackets>`. Anything else is fixed text. |
+   | `## Section rules` | A table with Section, Rule and When empty columns, one row per field. "When empty" is `Leave the section out`, `Leave the line out`, `Ask`, `TODO`, or `Never empty`. |
+   | `## Questionnaire` | The fields the skill may ask about, in order, at most three. Include one always-asked person field (such as `Reported by`). |
+   | `## Labels` | English → Afrikaans for every label and heading in the structure. |
+
+3. Keep it platform-neutral, with no labels, tags, assignees or front matter, and never write a
+   rule that lets the skill invent facts.
+4. Copy the folder to `~/.claude/skills/generate-git-ticket/` (or `git pull` there), then try
+   `/generate-git-ticket --<name>`. `SKILL.md` doesn't need to change.
 
 ---
 
@@ -85,7 +143,7 @@ If `~/.claude/skills` already exists and has content you want to keep, clone els
 
 ```bash
 git clone https://github.com/Steelwool9925/claude-skills.git /tmp/claude-skills
-cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin,document-changes,haiku-split} ~/.claude/skills/
+cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin,document-changes,haiku-split,generate-git-ticket} ~/.claude/skills/
 cp -r /tmp/claude-skills/ui-ux-pro-max ~/.claude/skills/   # optional — standalone, not pipeline
 cp -r /tmp/claude-skills/tooling ~/.claude/skills/
 mkdir -p ~/.claude/skills/_shared
@@ -106,6 +164,7 @@ The end state you want (skills only):
 ├── cleanup-crew/SKILL.md
 ├── document-changes/SKILL.md
 ├── execute-plan/SKILL.md
+├── generate-git-ticket/  SKILL.md + templates/ (basic, bug, feature-request)
 ├── haiku-split/          SKILL.md + templates/ + tests/ — experimental
 ├── kevin/SKILL.md
 ├── map-codebase/         SKILL.md + map.mjs + test scripts
@@ -129,7 +188,7 @@ cp ~/.claude/skills/context-threshold-hook/*.js ~/.claude/hooks/
 
 ### Step 3: Restart Claude Code
 
-Restart Claude Code (or `/exit` and relaunch). Confirm with `/help` — the eight slash commands (the seven pipeline skills plus `/haiku-split`) should be listed. `ui-ux-pro-max` has no slash command; it loads on relevance.
+Restart Claude Code (or `/exit` and relaunch). Confirm with `/help` — the nine slash commands (the seven pipeline skills plus `/haiku-split` and `/generate-git-ticket`) should be listed. `ui-ux-pro-max` has no slash command; it loads on relevance.
 
 ---
 
