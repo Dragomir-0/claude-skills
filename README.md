@@ -6,7 +6,7 @@ My personal Claude Code setup: a feature pipeline of slash-command skills plus b
 
 ### Skills (slash commands)
 
-A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a branch, reviewed and pushed" — with a UAT persona that can run standalone at any point. Each stage is a slash command, writes exactly one kind of artifact, and hard-pauses for decisions that are yours to make. `/haiku-split` is a standalone utility alongside it, and one further skill, [`ui-ux-pro-max`](#also-here--ui-ux-pro-max), sits outside the pipeline entirely.
+A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a branch, reviewed and pushed" — with a UAT persona that can run standalone at any point. Each stage is a slash command, writes exactly one kind of artifact, and hard-pauses for decisions that are yours to make. `/haiku-split` (experimental) is a standalone utility alongside it, and one further skill, [`ui-ux-pro-max`](#also-here--ui-ux-pro-max), sits outside the pipeline entirely.
 
 ```
 /map-codebase  →  /plan-feature  →  /execute-plan  →  /test-feature  →  /document-changes  →  /cleanup-crew
@@ -24,7 +24,18 @@ A seven-skill pipeline that takes a feature from "I have an idea" to "it's on a 
 | **`/kevin`** | Plays a careless first-time user through the live frontend — a feature, a whole map domain, or the entire project — deliberately mistyping and misclicking, and reports every bug, crash and confusing moment. Reads the plan/map, never source. | a bug report (+ onboarding doc) |
 | **`/cleanup-crew`** | Stashes, branches off an up-to-date base, restores the work, refreshes docs, and drives a reviewed conventional commit and push ready for a PR. | a branch + commit |
 | **`/document-changes`** | Analyzes git diffs to generate comprehensive change documentation with ticket context, architecture impact, and design decisions. Maps files to layers, documents the "why" behind changes, and produces structured markdown explaining what changed and how it affects the codebase. | change docs |
-| **`/haiku-split`** | Splits any skill's steps into Haiku-sized tasks and runs them as a chained, context-capped Haiku Workflow with handoff files. Launches only after you confirm each run; judgment and approval steps stay with the main session. | a run folder (task spec + workflow script + notes) |
+| **`/haiku-split`** ⚠️ *experimental* | **[Experimental — see below.](#experimental-haiku-split)** Splits any skill's steps into Haiku-sized tasks and runs them as a chained, context-capped Haiku Workflow with handoff files. Launches only after you confirm each run; judgment and approval steps stay with the main session. | a run folder (task spec + workflow script + notes) |
+
+<a id="experimental-haiku-split"></a>
+
+> [!WARNING]
+> **`/haiku-split` is experimental — use it at your own risk.** It is new, lightly tested, and
+> launches Haiku Workflow runs that spend tokens once you confirm them. Its behaviour, templates and
+> run-folder layout may change without notice. Review each generated task spec before you confirm
+> a run, and don't point it at work you can't easily redo.
+>
+> If something breaks or behaves unexpectedly, please [open an issue](../../issues) with the skill
+> you split, what you expected, and what happened (attach the run folder's notes if you can).
 
 `_shared/pipeline-contract.md` holds the artifact paths, repo resolution, `<Name>` derivation, cost
 discipline and the no-subagent policy that these skills read, and
@@ -95,7 +106,7 @@ The end state you want (skills only):
 ├── cleanup-crew/SKILL.md
 ├── document-changes/SKILL.md
 ├── execute-plan/SKILL.md
-├── haiku-split/          SKILL.md + templates/ + tests/
+├── haiku-split/          SKILL.md + templates/ + tests/ — experimental
 ├── kevin/SKILL.md
 ├── map-codebase/         SKILL.md + map.mjs + test scripts
 ├── plan-feature/SKILL.md
