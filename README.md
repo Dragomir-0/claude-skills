@@ -47,6 +47,9 @@ marketplace plugin, so it is mine to version and nothing else would back it up.
 
 `scripts/__pycache__/` is gitignored — the `.pyc` files are build output and regenerate on use.
 
+It is a modified version of [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)
+and remains under that project's MIT license — see [`ui-ux-pro-max/LICENSE`](ui-ux-pro-max/LICENSE).
+
 ---
 
 ## Install on a new machine
