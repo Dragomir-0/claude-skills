@@ -3,16 +3,19 @@ name: roadmap-loop
 description: >
   Run the roadmap loop on the next Active row of .claude/roadmap.md: open GitHub issues,
   execute-plan, then loop test-feature + kevin + corrections until test-feature says "ship" and
-  kevin has no Critical issues, then cleanup-crew, one PR per repo, merge on green CI (in the
-  plan's deployment order), pull main, and repeat until the roadmap phase has no Active rows. Never spawns a
+  kevin has no Critical issues, then cleanup-crew, one PR per repo, and stop at green PRs. With
+  --merge only: merge on green CI (in the plan's deployment order), pull main, and repeat until the
+  roadmap phase has no Active rows. Never merges by default. Never spawns a
   subagent. Triggered by /roadmap-loop.
 disable-model-invocation: true
 ---
 
 # roadmap-loop
 
-Takes no arguments. It runs the next `Active` row and keeps going row after row until the phase
-is finished. It orchestrates `execute-plan`, `test-feature`, `kevin` and `cleanup-crew`; each of
+Usage: `/roadmap-loop [--merge]`. **By default it never merges.** It runs the next `Active` row
+through to green pull requests, reports them and stops, leaving the merge to the user. With
+`--merge` it also merges each PR once its checks are green and keeps going row after row until the
+phase is finished. It orchestrates `execute-plan`, `test-feature`, `kevin` and `cleanup-crew`; each of
 those keeps its own rules except where this file says otherwise.
 
 **Never spawn a subagent — not via `Agent`, not via `Workflow`, not via any other dispatch
@@ -30,17 +33,19 @@ These replace the per-step hard pauses *for this loop only*, and only inside thi
 - **Milestone approval:** a milestone is approved automatically when its own verification passes.
   Write `APPROVED | milestone=<N> | by=roadmap-loop` to the ledger (plan-pruning reads the number).
 - **Cleanup-crew pauses** (branch, base, commit message) are pre-answered — see step D.
-- **Merge:** squash-merge a PR to `main` once every check is green, in the plan's deployment order
-  (backend before frontend when the plan is silent), then delete the branch.
+- **Merge, only when `--merge` is passed:** squash-merge a PR to `main` once every check is green,
+  in the plan's deployment order (backend before frontend when the plan is silent), then delete the
+  branch. Without `--merge` this authorization does not apply and the loop never merges.
 - **Round cap:** none. The brakes are the repeat-finding stop (step C) and the 350k-per-milestone
   budget guard.
 
-Nothing here authorizes force-pushing, pushing to `main` directly, merging with a red or missing
-check, repos the plan does not name, or weakening a check to get it green.
+Nothing here authorizes force-pushing, pushing to `main` directly, merging without `--merge`, merging with a red or
+missing check, repos the plan does not name, or weakening a check to get it green.
 
 ## 0 — Gate
 
 - **Plan mode active → STOP:** "roadmap-loop executes; approve first."
+- **Arguments:** `--merge` is the only one and is off unless given. Anything else → stop and say so.
 - **Preflight, every repo the plan names:** on `main`, clean working tree, `git fetch`
   shows `main` level with `origin/main`, `gh auth status` is signed in. Anything else → stop and
   say what is wrong; do not switch branches over uncommitted work.
@@ -48,7 +53,8 @@ check, repos the plan does not name, or weakening a check to get it green.
   `.claude/roadmap.md` (row Status), the item's `.claude/plans/<Name>.ledger.md`
   (`CORRECTIONS`, `APPROVED`, `LOOP` lines), and GitHub (`gh pr list --head feature/<Name>`). A repo
   already on `feature/<Name>`, or an open PR for it, means the item is mid-flight: resume at the
-  matching step instead of starting over. Print which step you resumed at.
+  matching step instead of starting over. A PR for `feature/<Name>` that is already merged (by the
+  user, or by an earlier `--merge` run) resumes at step G. Print which step you resumed at.
 
 ## 1 — Select the item
 
@@ -127,8 +133,11 @@ verdict, rounds taken, remaining Warnings/Minor items, "Known follow-ups", and `
 
 1. `gh pr checks --watch` for each PR (long waits: run it in the background and wait for the
    notification; no sleep loops).
-2. **Every check green →** `gh pr merge --squash --delete-branch`, in that same deployment order. Never
-   merge with a failing, pending or missing check.
+2. **Every check green and `--merge` passed →** `gh pr merge --squash --delete-branch`, in that same
+   deployment order. Never merge with a failing, pending or missing check.
+   **Every check green and no `--merge` →** do not merge. Print each PR's URL and check state, ask the
+   user to merge them (or to re-run `/roadmap-loop --merge`), and **stop**: the row stays `Active` and
+   step G does not run. A later run finds the PRs merged and resumes at step G.
 3. **Red check, or a merge conflict →** treat it as a correction round: read the failure
    (`gh run view --log-failed`), fix the cause (never skip a test, loosen a threshold, delete a
    check or edit the workflow just to pass), commit to the same branch as a new commit, push, and
@@ -138,7 +147,7 @@ verdict, rounds taken, remaining Warnings/Minor items, "Known follow-ups", and `
 4. If an earlier repo merged and a later one then fails, leave the merged one. Fix the failing
    repo; never unwind.
 
-## G — After the merge
+## G — After the merge (only once the PRs are merged)
 
 - Every repo that changed: `git checkout main && git pull`; confirm a clean tree and that each issue is closed.
 - Run `/cleanup-crew` steps 8–9 (prune the finished plan, remove the consumed handoff doc).
@@ -162,7 +171,7 @@ branch outside the scope above.
 - Running cleanup-crew's stash/branch steps over an existing `feature/<Name>` branch.
 - Pruning the plan before the merge, then needing it for a CI correction round.
 - Calling a verdict of "fix first" clean. Only "ship" exits the loop.
-- Merging out of the plan's deployment order.
+- Merging without `--merge`, or out of the plan's deployment order.
 - Fixing a red check by weakening it.
 - Skipping the saved `.round<k>` reports and judging "repeat" from memory.
 - Treating an optional correction item as mandatory (runaway) or a mandatory one as optional.
