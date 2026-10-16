@@ -1,10 +1,10 @@
 ---
 name: roadmap-loop
 description: >
-  Run the AoS roadmap loop on the next Active row of .claude/roadmap.md: open GitHub issues,
+  Run the roadmap loop on the next Active row of .claude/roadmap.md: open GitHub issues,
   execute-plan, then loop test-feature + kevin + corrections until test-feature says "ship" and
-  kevin has no Critical issues, then cleanup-crew, one PR per repo, merge on green CI (server
-  first), pull main, and repeat until the roadmap phase has no Active rows. Never spawns a
+  kevin has no Critical issues, then cleanup-crew, one PR per repo, merge on green CI (in the
+  plan's deployment order), pull main, and repeat until the roadmap phase has no Active rows. Never spawns a
   subagent. Triggered by /roadmap-loop.
 disable-model-invocation: true
 ---
@@ -22,22 +22,26 @@ surface.** Every step runs in this session. This is not softened by anything bel
 
 These replace the per-step hard pauses *for this loop only*, and only inside this scope:
 
-- **Repos:** `Steelwool9925/aos-server` and `Steelwool9925/aos-client`, base branch `main`.
+- **Repos:** only the repos this project names: the `**Repos:**` line of the plan being run. Each
+  must be a checkout in this workspace and is resolved to its GitHub `owner/name` from its own
+  `origin` remote (`gh repo view --json nameWithOwner,defaultBranchRef`). Nothing is hard-coded.
+  The base branch is each repo's default branch, usually `main`; `main` below means that base
+  branch. A plan that names a repo with no checkout or no GitHub `origin` → stop and ask.
 - **Milestone approval:** a milestone is approved automatically when its own verification passes.
   Write `APPROVED | milestone=<N> | by=roadmap-loop` to the ledger (plan-pruning reads the number).
 - **Cleanup-crew pauses** (branch, base, commit message) are pre-answered — see step D.
-- **Merge:** squash-merge a PR to `main` once every check is green, server before client, then
-  delete the branch.
+- **Merge:** squash-merge a PR to `main` once every check is green, in the plan's deployment order
+  (backend before frontend when the plan is silent), then delete the branch.
 - **Round cap:** none. The brakes are the repeat-finding stop (step C) and the 350k-per-milestone
   budget guard.
 
 Nothing here authorizes force-pushing, pushing to `main` directly, merging with a red or missing
-check, other repos, or weakening a check to get it green.
+check, repos the plan does not name, or weakening a check to get it green.
 
 ## 0 — Gate
 
 - **Plan mode active → STOP:** "roadmap-loop executes; approve first."
-- **Preflight, both repos (`server/`, `client/`):** on `main`, clean working tree, `git fetch`
+- **Preflight, every repo the plan names:** on `main`, clean working tree, `git fetch`
   shows `main` level with `origin/main`, `gh auth status` is signed in. Anything else → stop and
   say what is wrong; do not switch branches over uncommitted work.
 - **Resume detection.** The state lives in three places, so a restart picks up cleanly:
@@ -81,9 +85,9 @@ while the session is below Opus tier, the 350k budget ceiling, and a missing-inp
 
 1. `/test-feature --plan <plan> --optimism 3`. Before overwriting, copy the previous report to
    `.claude/reports/<report>.round<k>.md`.
-2. `/kevin --plan <plan>`, same copying. If the plan touches **no client repo** (server-only),
+2. `/kevin --plan <plan>`, same copying. If the plan touches **no frontend repo** (backend-only),
    skip kevin, write `LOOP | kevin=n/a (no frontend)` and let test-feature alone decide. If the plan
-   does touch the client and no browser surface is available, stop and say so.
+   does touch a frontend and no browser surface is available, stop and say so.
 3. **Clean means both:** test-feature's verdict is exactly **ship**, and kevin reports **no
    Critical issues** (and its verdict is not "broken"). Warnings, Confusing and Minor items that
    remain do not block; they go into the PR body.
@@ -114,7 +118,8 @@ would collide with the existing branch. Start at its step 0 drift check, then:
 
 ## E — Pull requests
 
-Server first, then client (only the repos with changes). `gh pr create --base main --head
+In the plan's deployment order (backend before frontend when silent), only the repos with
+changes. `gh pr create --base main --head
 feature/<Name>`; the body has the summary, the test-feature verdict and coverage line, the kevin
 verdict, rounds taken, remaining Warnings/Minor items, "Known follow-ups", and `Closes #<n>`.
 
@@ -122,7 +127,7 @@ verdict, rounds taken, remaining Warnings/Minor items, "Known follow-ups", and `
 
 1. `gh pr checks --watch` for each PR (long waits: run it in the background and wait for the
    notification; no sleep loops).
-2. **Every check green →** `gh pr merge --squash --delete-branch`, server before client. Never
+2. **Every check green →** `gh pr merge --squash --delete-branch`, in that same deployment order. Never
    merge with a failing, pending or missing check.
 3. **Red check, or a merge conflict →** treat it as a correction round: read the failure
    (`gh run view --log-failed`), fix the cause (never skip a test, loosen a threshold, delete a
@@ -130,11 +135,12 @@ verdict, rounds taken, remaining Warnings/Minor items, "Known follow-ups", and `
    re-run **C** before re-checking CI. The repeat-finding stop applies to CI too: the same failing
    check with the same cause twice means stop and ask. Never force-push; resolve a conflict by
    merging `origin/main` into the branch.
-4. If server merged and client then fails, leave server merged. Fix the client; never unwind.
+4. If an earlier repo merged and a later one then fails, leave the merged one. Fix the failing
+   repo; never unwind.
 
 ## G — After the merge
 
-- Both repos: `git checkout main && git pull`; confirm a clean tree and that each issue is closed.
+- Every repo that changed: `git checkout main && git pull`; confirm a clean tree and that each issue is closed.
 - Run `/cleanup-crew` steps 8–9 (prune the finished plan, remove the consumed handoff doc).
 - Set the row's Status to `Done` in `.claude/roadmap.md`.
 - Print a one-table summary: repo, PR, merge commit, issue, rounds taken.
@@ -146,7 +152,7 @@ verdict, rounds taken, remaining Warnings/Minor items, "Known follow-ups", and `
 
 A contradictory plan · budget ceiling reached · repeat finding · a task needing an Opus-tier
 session · `Depends on` not satisfied · a dirty or diverged `main` · missing `gh` auth · no browser
-surface for a client item · a conflict that is not mechanical · anything that would touch a repo or
+surface for a frontend item · a conflict that is not mechanical · anything that would touch a repo or
 branch outside the scope above.
 
 ## Common mistakes
@@ -156,7 +162,7 @@ branch outside the scope above.
 - Running cleanup-crew's stash/branch steps over an existing `feature/<Name>` branch.
 - Pruning the plan before the merge, then needing it for a CI correction round.
 - Calling a verdict of "fix first" clean. Only "ship" exits the loop.
-- Merging the client before the server.
+- Merging out of the plan's deployment order.
 - Fixing a red check by weakening it.
 - Skipping the saved `.round<k>` reports and judging "repeat" from memory.
 - Treating an optional correction item as mandatory (runaway) or a mandatory one as optional.
