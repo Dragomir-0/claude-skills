@@ -294,3 +294,7 @@ Both gaps are now resolved:
   message rather than skipping the check if Docker isn't available.
 
 No open questions remain. This document is ready to hand to `superpowers:writing-plans`.
+
+Dry-run verification, 2026-11-08: pass — hop 1→2 trace, business-aligner
+checkpoint pause, bounce-cap synthetic trace, resume-backward synthetic trace, no-git-repo stop,
+all traced by hand against scratch state per the plan's Task 14.

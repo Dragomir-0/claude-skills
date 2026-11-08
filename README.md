@@ -21,6 +21,7 @@ hard-pauses for me at the decisions that are mine to make. One further skill,
 | **`/test-feature`** | Grades the implemented feature against its plan at a chosen rigour (`--optimism 1-5`), measuring real coverage at level 3+, tracing the feature end to end with systematic debugging, and checking completeness, security, deployment, pipeline and efficiency. Never spawns subagents — the whole run stays in one evidence trail. Never touches source. | a test report |
 | **`/kevin`** | Plays a careless first-time user through the live frontend — a feature, a whole map domain, or the entire project — deliberately mistyping and misclicking, and reports every bug, crash and confusing moment. Reads the plan/map, never source. | a bug report (+ onboarding doc) |
 | **`/cleanup-crew`** | Stashes, branches off an up-to-date base, restores the work, refreshes docs, and drives a reviewed conventional commit and push ready for a PR. | a branch + commit |
+| **`/roadmap-loop`** | Runs the next `Active` row of `.claude/roadmap.md` end to end: its ticket link, `/execute-plan`, a `/test-feature` + `/kevin` + corrections loop until "ship" with no Critical, `/cleanup-crew`, one PR per repo, then stops at green PRs. It works on GitHub or Azure DevOps (chosen per repo from `origin`), never creates a ticket unless given `--issues`, and never merges by default; with `--merge` it also merges on green CI (in the plan's deployment order), pulls `main`, and repeats until the roadmap phase has no Active rows. Standing authorization is scoped to the repos the running plan names (read from the project, never hard-coded). Never spawns subagents. | issues, PRs, merges, a ledger |
 | **`/haiku-split`** | Splits any skill's steps into Haiku-sized tasks and runs them as a chained, context-capped Haiku Workflow with handoff files. Launches only after you confirm each run; judgment and approval steps stay with the main session. | a run folder (task spec + workflow script + notes) |
 
 `_shared/pipeline-contract.md` holds the artifact paths, repo resolution, `<Name>` derivation, cost
@@ -49,6 +50,35 @@ marketplace plugin, so it is mine to version and nothing else would back it up.
 
 ---
 
+## Optional add-on — `claude-monitor`
+
+Not a skill and not part of the pipeline: a Windows background monitor for Claude Code terminal
+sessions. When a session's closing message tells you to `/clear` and read a handoff file, it sends
+`/clear` and then tells the fresh session to read the handoff. It is a .NET 10 daemon plus a Node
+`SessionStart` hook (`src/`, `hook/`, `tests/`, `docs/`, prebuilt binaries in `artifacts/`).
+
+It has no `SKILL.md`, so Claude Code never loads it, and it shares nothing with `_shared/` or
+`tooling/`. Skip it unless you want that behaviour. Build, test and hook-install steps are in
+[`claude-monitor/README.md`](claude-monitor/README.md).
+
+---
+
+## Also here — `pigeon`
+
+Not one of "the six" in `_shared/pipeline-contract.md` — `pigeon` sits *above* the pipeline.
+`/pigeon "<task description>"` runs one feature end-to-end through ten fixed personas in a
+single continuous session, chaining them via handoff documents each persona writes naming the
+next persona to pick it up. Several personas call straight into the six-skill pipeline
+(`plan-feature`, `execute-plan`, `test-feature`, `kevin`) plus `security-review`, `simplify` and
+`cleanup-crew` as their substantive step, rather than reinventing any of them. Hard-pauses at the
+business aligner's cost/timeline checkpoint, any backward hop, and the cybersecurity expert's
+findings. `/pigeon --resume <Name>` continues a paused or interrupted run.
+
+Needs Docker on `PATH` for the test engineer persona's load-test verification — see Dependencies
+below.
+
+---
+
 ## Install on a new machine
 
 Skills are plain files; nothing syncs through the Claude account. Clone this repo *as* the
@@ -63,8 +93,9 @@ copy instead:
 
 ```bash
 git clone https://github.com/Steelwool9925/claude-skills.git /tmp/claude-skills
-cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin,haiku-split} ~/.claude/skills/
+cp -r /tmp/claude-skills/{execute-plan,plan-feature,test-feature,map-codebase,cleanup-crew,kevin,haiku-split,pigeon} ~/.claude/skills/
 cp -r /tmp/claude-skills/ui-ux-pro-max ~/.claude/skills/   # optional — standalone, not pipeline
+cp -r /tmp/claude-skills/claude-monitor ~/.claude/skills/   # optional — Windows add-on, not a skill (see claude-monitor/README.md)
 cp -r /tmp/claude-skills/tooling ~/.claude/skills/
 mkdir -p ~/.claude/skills/_shared
 cp /tmp/claude-skills/_shared/{pipeline-contract.md,complexity-scoring.md} ~/.claude/skills/_shared/
@@ -130,6 +161,13 @@ never a standing "work autonomously" instruction. See `_shared/pipeline-contract
 (`claude-in-chrome` skill + `mcp__claude-in-chrome__*`) first, then **Chrome DevTools MCP**
 (`chrome-devtools-mcp:chrome-devtools` + `mcp__*chrome-devtools__*`), and stops if neither is
 available. It never substitutes reading source or `curl` for actually driving the app.
+
+### Required — Docker, for `/pigeon`
+
+The test-engineer persona (step 5 of `/pigeon`) verifies its resource-budget estimate for real
+by running load tests inside Docker, resource-limited to that estimate, on a small-Linux base
+image. If Docker isn't on `PATH`, that persona stops with a plain message rather than skipping
+the real check.
 
 ### Optional — `ado-status`
 
