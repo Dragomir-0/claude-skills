@@ -5,6 +5,10 @@ This file is read by all six pipeline skills — `map-codebase`, `plan-feature`,
 defined. A skill that needs to know where something lives cites a section here rather than
 restating it, so a path change is a one-file edit.
 
+`pigeon` also reads this file, when one of its personas invokes `plan-feature`, `execute-plan`,
+`test-feature`, `kevin`, `security-review` or `cleanup-crew` — but it is not one of "the six" and
+produces none of the artifacts in the table below itself.
+
 The chain is a convention, not an automation: no stage invokes the next; each ends by naming the
 command that would typically follow. **The one exception is `/execute-plan --roadmap`**, which
 invokes `test-feature` and `kevin` itself as part of its own per-item convergence loop — see
